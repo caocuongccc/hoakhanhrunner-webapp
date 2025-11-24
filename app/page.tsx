@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Calendar, Users, Award, ArrowRight } from "lucide-react";
+import { Calendar, Users, Award, ArrowRight, Activity } from "lucide-react";
 import { createSupabaseClient, Event } from "@/lib/supabase";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
