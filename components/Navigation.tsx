@@ -26,7 +26,8 @@ export default function Navigation() {
 
   const navItems = [
     { href: "/", label: "Trang chủ", icon: Home },
-    { href: "/events", label: "Sự kiện", icon: Calendar },
+    { href: "/events/individual", label: "Sự kiện cá nhân", icon: Calendar },
+    { href: "/events/team", label: "Sự kiện đội", icon: Users },
     { href: "/activities", label: "Hoạt động", icon: Activity },
     { href: "/feed", label: "Bảng tin", icon: Users },
     { href: "/members", label: "Thành viên", icon: Users },

@@ -37,6 +37,7 @@ export default function AuthProvider({
     try {
       // Check if user_id cookie exists via API call
       const response = await fetch("/api/auth/session");
+      console.log("Response from /api/auth/session:", response);
       const data = await response.json();
 
       if (data.user) {

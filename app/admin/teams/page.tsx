@@ -58,8 +58,7 @@ export default function AdminTeamsPage() {
     try {
       let query = supabase.from("teams").select(`
           *,
-          events!inner(name, event_type),
-          users!teams_captain_id_fkey(username, avatar_url)
+          events!inner(name, event_type)
         `);
 
       if (filter !== "all") {
@@ -220,27 +219,6 @@ export default function AdminTeamsPage() {
               </div>
 
               <div className="space-y-3">
-                {/* Captain */}
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    {team.users.avatar_url ? (
-                      <img
-                        src={team.users.avatar_url}
-                        alt={team.users.username}
-                        className="w-full h-full rounded-full object-cover"
-                      />
-                    ) : (
-                      <Users className="h-4 w-4 text-blue-600" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Đội trưởng</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {team.users.username}
-                    </p>
-                  </div>
-                </div>
-
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t">
                   <div>
