@@ -1,67 +1,161 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Activity, AlertCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, CheckCircle } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const error = searchParams.get("error");
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      router.push("/");
+    }
+  }, [user, router]);
 
   const handleStravaLogin = () => {
     const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
-    const redirectUri = process.env.NEXT_PUBLIC_STRAVA_REDIRECT_URI;
+    const redirectUri = `${window.location.origin}/auth/strava/callback`;
+    const scope = "read,activity:read_all,activity:write";
 
-    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=auto&scope=read,activity:read_all,activity:write,profile:read_all`;
+    const stravaAuthUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
 
-    window.location.href = authUrl;
+    window.location.href = stravaAuthUrl;
   };
 
-  useEffect(() => {
-    // Check if user just authenticated successfully
-    if (searchParams.get("auth") === "success") {
-      router.push("/");
-    }
-  }, [searchParams, router]);
-
-  const getErrorMessage = (errorCode: string | null) => {
-    switch (errorCode) {
-      case "no_code":
-        return "Không nhận được mã xác thực từ Strava";
-      case "insufficient_scope":
-        return "Bạn cần cấp đầy đủ quyền truy cập để sử dụng ứng dụng";
-      case "user_creation_failed":
-        return "Không thể tạo tài khoản. Vui lòng thử lại";
-      case "callback_failed":
-        return "Đăng nhập thất bại. Vui lòng thử lại";
-      default:
-        return errorCode ? `Lỗi: ${errorCode}` : null;
-    }
-  };
+  if (user) {
+    return null;
+  }
 
   return (
-    <div className="min-h-[calc(100vh-200px)] flex items-center justify-center py-12 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-blue-100 rounded-full">
-              <Activity className="h-12 w-12 text-blue-600" />
+            <div className="p-3 bg-blue-600 rounded-full">
+              <svg
+                className="h-12 w-12 text-white"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+              </svg>
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Đăng nhập</h2>
-          <p className="mt-2 text-gray-600">Kết nối với Strava để bắt đầu</p>
+          <h2 className="text-3xl font-bold text-gray-900">
+            Chào mừng đến Running Club
+          </h2>
+          <p className="mt-2 text-gray-600">
+            Kết nối với Strava để bắt đầu hành trình chạy bộ của bạn
+          </p>
         </div>
 
-        {/* Login Form */}
-        <div className="bg-white p-8 rounded-xl shadow-md space-y-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start">
-              <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
-              <span className="text-sm">{getErrorMessage(error)}</span>
+        {/* Login Card */}
+        <div className="bg-white rounded-xl shadow-2xl p-8 space-y-6">
+          {/* Benefits */}
+          <div className="space-y-3">
+            <div className="flex items-start space-x-3">
+              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  Tham gia sự kiện
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Đăng ký và tham gia các sự kiện chạy bộ cá nhân và đội
+                </p>
+              </div>
             </div>
-          )}
+            <div className="flex items-start space-x-3">
+              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  Theo dõi hoạt động
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Tự động đồng bộ các hoạt động chạy bộ từ Strava
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  Xếp hạng và phần thưởng
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Cạnh tranh với bạn bè và nhận phần thưởng
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Permissions Info */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <h3 className="font-semibold text-yellow-900 mb-3 flex items-center">
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Quyền truy cập cần thiết
+            </h3>
+            <div className="space-y-2 text-sm text-yellow-800">
+              <label className="flex items-start space-x-2 cursor-default">
+                <input
+                  type="checkbox"
+                  checked
+                  disabled
+                  className="mt-1 cursor-default"
+                />
+                <div>
+                  <strong>Đọc thông tin cá nhân</strong>
+                  <p className="text-yellow-700">
+                    Tên, ảnh đại diện, email để tạo hồ sơ của bạn
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-start space-x-2 cursor-default">
+                <input
+                  type="checkbox"
+                  checked
+                  disabled
+                  className="mt-1 cursor-default"
+                />
+                <div>
+                  <strong>Đọc hoạt động</strong>
+                  <p className="text-yellow-700">
+                    Xem các hoạt động chạy bộ của bạn để tính điểm sự kiện
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-start space-x-2 cursor-default">
+                <input
+                  type="checkbox"
+                  checked
+                  disabled
+                  className="mt-1 cursor-default"
+                />
+                <div>
+                  <strong>Ghi hoạt động (Tùy chọn)</strong>
+                  <p className="text-yellow-700">
+                    Cập nhật mô tả hoạt động với badge sự kiện
+                  </p>
+                </div>
+              </label>
+            </div>
+            <p className="text-xs text-yellow-700 mt-3 bg-yellow-100 p-2 rounded">
+              <strong>Lưu ý:</strong> Các quyền này được Strava yêu cầu khi kết
+              nối. Bạn có thể thu hồi bất cứ lúc nào trong{" "}
+              <a
+                href="https://www.strava.com/settings/apps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline font-medium"
+              >
+                cài đặt Strava
+              </a>
+              .
+            </p>
+          </div>
 
           {/* Strava Connect Button */}
           <button
@@ -74,39 +168,39 @@ export default function LoginPage() {
             <span>Đăng nhập với Strava</span>
           </button>
 
-          {/* Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">
-              Tại sao cần kết nối Strava?
-            </h3>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Tự động đồng bộ hoạt động chạy bộ của bạn</li>
-              <li>• Không cần nhập dữ liệu thủ công</li>
-              <li>• Theo dõi tiến độ trong các sự kiện</li>
-              <li>• Chia sẻ thành tích với cộng đồng</li>
-            </ul>
-          </div>
-
-          {/* Privacy Notice */}
+          {/* Privacy Note */}
           <p className="text-xs text-gray-500 text-center">
-            Chúng tôi chỉ truy cập hoạt động chạy bộ của bạn. Dữ liệu của bạn
-            được bảo mật và không chia sẻ với bên thứ ba.
+            Bằng cách đăng nhập, bạn đồng ý với{" "}
+            <a href="/terms" className="underline">
+              Điều khoản sử dụng
+            </a>{" "}
+            và{" "}
+            <a href="/privacy" className="underline">
+              Chính sách bảo mật
+            </a>{" "}
+            của chúng tôi.
           </p>
         </div>
 
-        {/* Help Text */}
-        <div className="text-center text-sm text-gray-600">
-          <p>
-            Chưa có tài khoản Strava?{" "}
-            <a
-              href="https://www.strava.com/register"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-blue-600 hover:text-blue-500"
-            >
-              Đăng ký tại đây
-            </a>
-          </p>
+        {/* Admin Login Link */}
+        <div className="text-center">
+          <a
+            href="/admin-login"
+            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            Bạn là quản trị viên?{" "}
+            <span className="underline">Đăng nhập tại đây</span>
+          </a>
+        </div>
+
+        {/* Back to Home */}
+        <div className="text-center">
+          <a
+            href="/"
+            className="text-gray-600 hover:text-gray-900 text-sm transition-colors"
+          >
+            ← Quay lại trang chủ
+          </a>
         </div>
       </div>
     </div>

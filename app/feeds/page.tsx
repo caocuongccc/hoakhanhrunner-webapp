@@ -1,188 +1,97 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
+import { useRouter } from "next/navigation";
 import {
+  Activity,
   Heart,
   MessageCircle,
-  Calendar,
-  TrendingUp,
+  Share2,
+  MapPin,
   Clock,
+  TrendingUp,
+  Award,
 } from "lucide-react";
-import { createSupabaseClient } from "@/lib/supabase";
-import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
-import Link from "next/link";
 
-type FeedPost = {
+type ActivityFeed = {
   id: string;
   user_id: string;
-  content: string;
-  created_at: string;
-  likes_count: number;
-  comments_count: number;
+  activity_type: string;
+  distance: number;
+  duration: number;
+  elevation_gain: number;
+  average_speed: number;
+  max_speed: number;
+  start_date: string;
+  name: string;
+  description?: string;
+  polyline?: string;
   users: {
-    username: string;
-    full_name: string;
-    avatar_url: string;
-  };
-  activities?: {
     id: string;
-    distance_km: number;
-    duration_seconds: number;
-    pace_min_per_km: number;
-    activity_date: string;
-    events: {
-      name: string;
-    };
+    full_name: string;
+    profile_picture?: string;
+    username: string;
   };
+  likes_count?: number;
+  comments_count?: number;
 };
 
-export default function FeedPage() {
-  const { user } = useAuth();
-  const supabase = createSupabaseClient();
-  const [posts, setPosts] = useState<FeedPost[]>([]);
+export default function FeedsPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [activities, setActivities] = useState<ActivityFeed[]>([]);
   const [loading, setLoading] = useState(true);
-  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<"all" | "following" | "mine">("all");
 
   useEffect(() => {
-    loadFeed();
-    if (user) {
-      loadUserLikes();
+    if (!authLoading && !user) {
+      router.push("/login");
+      return;
     }
-  }, [user]);
 
-  const loadFeed = async () => {
+    if (user) {
+      loadActivities();
+    }
+  }, [user, authLoading, router, filter]);
+
+  const loadActivities = async () => {
     try {
-      // Get recent activities from all users
-      const { data: activities, error } = await supabase
+      setLoading(true);
+
+      let query = supabase
         .from("activities")
         .select(
           `
-          id,
-          user_id,
-          distance_km,
-          duration_seconds,
-          pace_min_per_km,
-          activity_date,
-          description,
-          created_at,
-          events!inner(name),
-          users!activities_user_id_fkey(username, full_name, avatar_url)
+          *,
+          users (
+            id,
+            full_name,
+            profile_picture,
+            username
+          )
         `
         )
-        .order("created_at", { ascending: false })
-        .limit(30);
+        .order("start_date", { ascending: false })
+        .limit(50);
+
+      // Filter by mine
+      if (filter === "mine") {
+        query = query.eq("user_id", user?.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
-      // Check if posts exist for these activities
-      const feedPosts = await Promise.all(
-        (activities || []).map(async (activity) => {
-          // Check if post exists
-          let { data: post } = await supabase
-            .from("posts")
-            .select("*")
-            .eq("activity_id", activity.id)
-            .single();
-
-          // Create post if doesn't exist
-          if (!post) {
-            const content = `đã hoàn thành ${activity.distance_km.toFixed(2)} km trong sự kiện ${activity.events.name}`;
-            const { data: newPost } = await supabase
-              .from("posts")
-              .insert([
-                {
-                  user_id: activity.user_id,
-                  activity_id: activity.id,
-                  content,
-                },
-              ])
-              .select()
-              .single();
-            post = newPost;
-          }
-
-          return {
-            ...post,
-            users: activity.users,
-            activities: {
-              ...activity,
-              events: activity.events,
-            },
-          };
-        })
-      );
-
-      setPosts(feedPosts.filter(Boolean));
+      setActivities(data || []);
     } catch (error) {
-      console.error("Error loading feed:", error);
+      console.error("Error loading activities:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadUserLikes = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("likes")
-        .select("post_id")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-
-      const liked = new Set((data || []).map((l) => l.post_id));
-      setLikedPosts(liked);
-    } catch (error) {
-      console.error("Error loading likes:", error);
-    }
-  };
-
-  const toggleLike = async (postId: string) => {
-    if (!user) return;
-
-    try {
-      if (likedPosts.has(postId)) {
-        // Unlike
-        await supabase
-          .from("likes")
-          .delete()
-          .eq("post_id", postId)
-          .eq("user_id", user.id);
-
-        await supabase.rpc("decrement_likes", { post_id: postId });
-
-        setLikedPosts((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(postId);
-          return newSet;
-        });
-
-        setPosts(
-          posts.map((p) =>
-            p.id === postId ? { ...p, likes_count: p.likes_count - 1 } : p
-          )
-        );
-      } else {
-        // Like
-        await supabase
-          .from("likes")
-          .insert([{ post_id: postId, user_id: user.id }]);
-
-        await supabase.rpc("increment_likes", { post_id: postId });
-
-        setLikedPosts((prev) => new Set(prev).add(postId));
-
-        setPosts(
-          posts.map((p) =>
-            p.id === postId ? { ...p, likes_count: p.likes_count + 1 } : p
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error toggling like:", error);
     }
   };
 
@@ -195,150 +104,189 @@ export default function FeedPage() {
     return `${minutes}m`;
   };
 
-  return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Bảng tin</h1>
-        <p className="text-gray-600">Hoạt động mới nhất của cộng đồng</p>
+  const formatPace = (metersPerSecond: number) => {
+    const minutesPerKm = 1000 / (metersPerSecond * 60);
+    const minutes = Math.floor(minutesPerKm);
+    const seconds = Math.floor((minutesPerKm - minutes) * 60);
+    return `${minutes}:${seconds.toString().padStart(2, "0")} /km`;
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
+    );
+  }
 
-      {/* Feed */}
-      {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="bg-white rounded-xl shadow-md p-6 animate-pulse"
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="container mx-auto px-4 max-w-4xl">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bảng tin</h1>
+          <p className="text-gray-600">
+            Theo dõi hoạt động của cộng đồng chạy bộ
+          </p>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setFilter("all")}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                filter === "all"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
             >
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                </div>
-              </div>
-              <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+              Tất cả
+            </button>
+            <button
+              onClick={() => setFilter("following")}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                filter === "following"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Đang theo dõi
+            </button>
+            <button
+              onClick={() => setFilter("mine")}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                filter === "mine"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Của tôi
+            </button>
+          </div>
+        </div>
+
+        {/* Activities Feed */}
+        <div className="space-y-4">
+          {activities.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+              <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Chưa có hoạt động nào
+              </h3>
+              <p className="text-gray-600">
+                Các hoạt động chạy bộ sẽ được hiển thị ở đây
+              </p>
             </div>
-          ))}
-        </div>
-      ) : posts.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-md p-12 text-center">
-          <TrendingUp className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">Chưa có hoạt động nào</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {posts.map((post) => (
-            <div
-              key={post.id}
-              className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow"
-            >
-              {/* User Info */}
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center">
-                  {post.users.avatar_url ? (
-                    <img
-                      src={post.users.avatar_url}
-                      alt={post.users.username}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-gray-600 font-bold text-lg">
-                      {post.users.username.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">
-                    {post.users.username}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {format(new Date(post.created_at), "dd/MM/yyyy HH:mm", {
-                      locale: vi,
-                    })}
-                  </p>
-                </div>
-              </div>
-
-              {/* Content */}
-              <p className="text-gray-700 mb-4">{post.content}</p>
-
-              {/* Activity Card */}
-              {post.activities && (
-                <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-4 mb-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm font-medium text-blue-900">
-                        {post.activities.events.name}
-                      </span>
-                    </div>
-                    <span className="text-xs text-blue-700">
+          ) : (
+            activities.map((activity) => (
+              <div
+                key={activity.id}
+                className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+              >
+                {/* User Info */}
+                <div className="p-4 flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                    {activity.users.profile_picture ? (
+                      <img
+                        src={activity.users.profile_picture}
+                        alt={activity.users.full_name}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      activity.users.full_name?.[0] || "U"
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900">
+                      {activity.users.full_name || activity.users.username}
+                    </h3>
+                    <p className="text-sm text-gray-500">
                       {format(
-                        new Date(post.activities.activity_date),
-                        "dd/MM/yyyy",
+                        new Date(activity.start_date),
+                        "dd MMM yyyy, HH:mm",
                         { locale: vi }
                       )}
-                    </span>
+                    </p>
                   </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-xs text-blue-700 mb-1">Khoảng cách</p>
-                      <p className="text-lg font-bold text-blue-900">
-                        {post.activities.distance_km.toFixed(2)} km
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-blue-700 mb-1">Thời gian</p>
-                      <p className="text-lg font-bold text-blue-900">
-                        {formatDuration(post.activities.duration_seconds)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-blue-700 mb-1">Pace</p>
-                      <p className="text-lg font-bold text-blue-900">
-                        {post.activities.pace_min_per_km
-                          ? post.activities.pace_min_per_km.toFixed(2)
-                          : "-"}{" "}
-                        min/km
-                      </p>
-                    </div>
-                  </div>
+                  <Activity className="h-5 w-5 text-orange-500" />
                 </div>
-              )}
 
-              {/* Actions */}
-              <div className="flex items-center space-x-6 pt-3 border-t">
-                <button
-                  onClick={() => toggleLike(post.id)}
-                  className={`flex items-center space-x-2 transition-colors ${
-                    likedPosts.has(post.id)
-                      ? "text-red-600"
-                      : "text-gray-600 hover:text-red-600"
-                  }`}
-                >
-                  <Heart
-                    className={`h-5 w-5 ${likedPosts.has(post.id) ? "fill-current" : ""}`}
-                  />
-                  <span className="text-sm font-medium">
-                    {post.likes_count}
-                  </span>
-                </button>
+                {/* Activity Details */}
+                <div className="px-4 pb-4">
+                  <h4 className="font-semibold text-lg text-gray-900 mb-2">
+                    {activity.name}
+                  </h4>
+                  {activity.description && (
+                    <p className="text-gray-600 text-sm mb-3">
+                      {activity.description}
+                    </p>
+                  )}
 
-                <div className="flex items-center space-x-2 text-gray-600">
-                  <MessageCircle className="h-5 w-5" />
-                  <span className="text-sm font-medium">
-                    {post.comments_count}
-                  </span>
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-lg p-4">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center mb-1">
+                        <MapPin className="h-4 w-4 text-gray-500 mr-1" />
+                      </div>
+                      <div className="text-2xl font-bold text-gray-900">
+                        {(activity.distance / 1000).toFixed(2)}
+                      </div>
+                      <div className="text-xs text-gray-500">km</div>
+                    </div>
+                    <div className="text-center border-l border-r border-gray-200">
+                      <div className="flex items-center justify-center mb-1">
+                        <Clock className="h-4 w-4 text-gray-500 mr-1" />
+                      </div>
+                      <div className="text-2xl font-bold text-gray-900">
+                        {formatDuration(activity.duration)}
+                      </div>
+                      <div className="text-xs text-gray-500">thời gian</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center mb-1">
+                        <TrendingUp className="h-4 w-4 text-gray-500 mr-1" />
+                      </div>
+                      <div className="text-2xl font-bold text-gray-900">
+                        {formatPace(activity.average_speed)}
+                      </div>
+                      <div className="text-xs text-gray-500">pace</div>
+                    </div>
+                  </div>
+
+                  {/* Additional Stats */}
+                  {activity.elevation_gain > 0 && (
+                    <div className="mt-3 flex items-center text-sm text-gray-600">
+                      <Award className="h-4 w-4 mr-1" />
+                      <span>
+                        Độ cao: {Math.round(activity.elevation_gain)}m
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="border-t px-4 py-3 flex items-center justify-around text-gray-600">
+                  <button className="flex items-center space-x-2 hover:text-red-500 transition-colors">
+                    <Heart className="h-5 w-5" />
+                    <span className="text-sm">{activity.likes_count || 0}</span>
+                  </button>
+                  <button className="flex items-center space-x-2 hover:text-blue-500 transition-colors">
+                    <MessageCircle className="h-5 w-5" />
+                    <span className="text-sm">
+                      {activity.comments_count || 0}
+                    </span>
+                  </button>
+                  <button className="flex items-center space-x-2 hover:text-green-500 transition-colors">
+                    <Share2 className="h-5 w-5" />
+                    <span className="text-sm">Chia sẻ</span>
+                  </button>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

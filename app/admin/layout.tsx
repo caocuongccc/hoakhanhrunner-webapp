@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/components/AuthProvider";
+import AdminAuthProvider, {
+  useAdminAuth,
+} from "@/components/AdminAuthProvider";
 import {
   LayoutDashboard,
   Calendar,
@@ -11,6 +13,7 @@ import {
   Settings,
   Activity,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -18,21 +21,35 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAuth();
+  return (
+    <AdminAuthProvider>
+      <AdminLayoutContent>{children}</AdminLayoutContent>
+    </AdminAuthProvider>
+  );
+}
+
+function AdminLayoutContent({ children }: { children: React.ReactNode }) {
+  const { admin, loading, signOut } = useAdminAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
+    // Không redirect nếu đang ở trang login
+    if (pathname !== "/admin/login" && !loading && !admin) {
+      router.push("/admin/login");
     }
-  }, [user, loading, router]);
+  }, [admin, loading, router, pathname]);
 
   useEffect(() => {
     // Get current path
-    const path = window.location.pathname;
-    setActiveTab(path);
-  }, []);
+    setActiveTab(pathname);
+  }, [pathname]);
+
+  // Nếu đang ở trang login, không cần check auth
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (
@@ -42,7 +59,7 @@ export default function AdminLayout({
     );
   }
 
-  if (!user) {
+  if (!admin) {
     return null;
   }
 
@@ -55,17 +72,27 @@ export default function AdminLayout({
     { href: "/admin/settings", label: "Cài đặt", icon: Settings },
   ];
 
+  const handleLogout = async () => {
+    if (confirm("Bạn có chắc muốn đăng xuất?")) {
+      await signOut();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Admin Layout - Không có top navigation */}
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-md min-h-screen">
+        <aside className="w-64 bg-white shadow-md min-h-screen flex flex-col">
           <div className="p-6 border-b">
             <h2 className="text-xl font-bold text-gray-900">Admin Panel</h2>
-            <p className="text-sm text-gray-600 mt-1">Quản trị hệ thống</p>
+            <p className="text-sm text-gray-600 mt-1">{admin.email}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Role: {admin.role === "super_admin" ? "Super Admin" : "Admin"}
+            </p>
           </div>
 
-          <nav className="p-4 space-y-1">
+          <nav className="p-4 space-y-1 flex-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive =
@@ -89,6 +116,17 @@ export default function AdminLayout({
               );
             })}
           </nav>
+
+          {/* Logout Button */}
+          <div className="p-4 border-t">
+            <button
+              onClick={handleLogout}
+              className="flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 w-full transition-colors"
+            >
+              <LogOut className="h-5 w-5" />
+              <span className="font-medium">Đăng xuất</span>
+            </button>
+          </div>
         </aside>
 
         {/* Main Content */}
