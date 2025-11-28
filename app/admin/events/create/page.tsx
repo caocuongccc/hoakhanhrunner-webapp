@@ -1,3 +1,4 @@
+// app/admin/events/create/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -20,9 +21,12 @@ export default function CreateEventPage() {
     description: "",
     event_type: "individual" as "team" | "individual",
     start_date: "",
+    start_time: "00:00",
     end_date: "",
+    end_time: "23:59",
     password: "",
     max_team_members: "",
+    max_teams: "",
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,13 +45,13 @@ export default function CreateEventPage() {
     if (!imageFile) return null;
 
     try {
-      const formData = new FormData();
-      formData.append("file", imageFile);
-      formData.append("folder", "events");
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", imageFile);
+      formDataUpload.append("folder", "events");
 
       const response = await fetch("/api/upload", {
         method: "POST",
-        body: formData,
+        body: formDataUpload,
       });
 
       const data = await response.json();
@@ -67,8 +71,18 @@ export default function CreateEventPage() {
 
     try {
       // Validate dates
-      if (new Date(formData.end_date) < new Date(formData.start_date)) {
-        alert("Ngày kết thúc phải sau ngày bắt đầu!");
+      const startDateTime = `${formData.start_date}T${formData.start_time}`;
+      const endDateTime = `${formData.end_date}T${formData.end_time}`;
+
+      if (new Date(endDateTime) < new Date(startDateTime)) {
+        alert("Thời gian kết thúc phải sau thời gian bắt đầu!");
+        setLoading(false);
+        return;
+      }
+
+      // Validate team event rules
+      if (formData.event_type === "team" && selectedRules.length === 0) {
+        alert("Sự kiện theo đội phải chọn ít nhất 1 luật chơi!");
         setLoading(false);
         return;
       }
@@ -97,12 +111,13 @@ export default function CreateEventPage() {
             name: formData.name,
             description: formData.description,
             event_type: formData.event_type,
-            start_date: formData.start_date,
-            end_date: formData.end_date,
+            start_date: startDateTime,
+            end_date: endDateTime,
             password: formData.password || null,
             max_team_members: formData.max_team_members
               ? parseInt(formData.max_team_members)
               : null,
+            max_teams: formData.max_teams ? parseInt(formData.max_teams) : null,
             image_url: imageUrl,
             created_by: sessionData.user.id,
           },
@@ -112,8 +127,8 @@ export default function CreateEventPage() {
 
       if (error) throw error;
 
-      // Add selected rules
-      if (selectedRules.length > 0) {
+      // Add selected rules (chỉ với team events)
+      if (formData.event_type === "team" && selectedRules.length > 0) {
         const ruleInserts = selectedRules.map((ruleId) => ({
           event_id: event.id,
           rule_id: ruleId,
@@ -151,7 +166,7 @@ export default function CreateEventPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Tạo sự kiện mới</h1>
           <p className="text-gray-600 mt-1">
-            Điền thông tin sự kiện và chọn luật chơi
+            Điền thông tin sự kiện và cấu hình luật chơi
           </p>
         </div>
       </div>
@@ -217,7 +232,7 @@ export default function CreateEventPage() {
                   }
                   className="w-4 h-4 text-blue-600"
                 />
-                <span>Cá nhân</span>
+                <span>Cá nhân (không cần luật)</span>
               </label>
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
@@ -232,31 +247,51 @@ export default function CreateEventPage() {
                   }
                   className="w-4 h-4 text-blue-600"
                 />
-                <span>Theo đội</span>
+                <span>Theo đội (bắt buộc chọn luật)</span>
               </label>
             </div>
           </div>
 
-          {/* Max Team Members (only for team events) */}
+          {/* Team Settings */}
           {formData.event_type === "team" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Số thành viên tối đa mỗi đội
-              </label>
-              <input
-                type="number"
-                min="2"
-                value={formData.max_team_members}
-                onChange={(e) =>
-                  setFormData({ ...formData, max_team_members: e.target.value })
-                }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="VD: 10"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-purple-50 rounded-lg">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Số đội tối đa
+                </label>
+                <input
+                  type="number"
+                  min="2"
+                  value={formData.max_teams}
+                  onChange={(e) =>
+                    setFormData({ ...formData, max_teams: e.target.value })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="VD: 10 đội"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Số thành viên tối đa mỗi đội
+                </label>
+                <input
+                  type="number"
+                  min="2"
+                  value={formData.max_team_members}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      max_team_members: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="VD: 5 người"
+                />
+              </div>
             </div>
           )}
 
-          {/* Dates */}
+          {/* Start Date & Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -274,6 +309,24 @@ export default function CreateEventPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giờ bắt đầu <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                required
+                value={formData.start_time}
+                onChange={(e) =>
+                  setFormData({ ...formData, start_time: e.target.value })
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* End Date & Time */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Ngày kết thúc <span className="text-red-500">*</span>
               </label>
               <input
@@ -282,6 +335,20 @@ export default function CreateEventPage() {
                 value={formData.end_date}
                 onChange={(e) =>
                   setFormData({ ...formData, end_date: e.target.value })
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giờ kết thúc <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                required
+                value={formData.end_time}
+                onChange={(e) =>
+                  setFormData({ ...formData, end_time: e.target.value })
                 }
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -302,9 +369,6 @@ export default function CreateEventPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Để trống nếu không cần mật khẩu"
             />
-            <p className="text-sm text-gray-500 mt-1">
-              Nếu đặt mật khẩu, người dùng cần nhập mật khẩu để tham gia sự kiện
-            </p>
           </div>
 
           {/* Image Upload */}
@@ -354,14 +418,21 @@ export default function CreateEventPage() {
           </div>
         </div>
 
-        {/* Rules Selection */}
-        <div className="border-t pt-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Luật chơi</h2>
-          <RulesSelector
-            selectedRules={selectedRules}
-            onChange={setSelectedRules}
-          />
-        </div>
+        {/* Rules Selection - Only for team events */}
+        {formData.event_type === "team" && (
+          <div className="border-t pt-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              Luật chơi <span className="text-red-500">*</span>
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Sự kiện theo đội bắt buộc phải chọn ít nhất 1 luật chơi
+            </p>
+            <RulesSelector
+              selectedRules={selectedRules}
+              onChange={setSelectedRules}
+            />
+          </div>
+        )}
 
         {/* Submit Buttons */}
         <div className="flex items-center justify-end space-x-4 border-t pt-6">

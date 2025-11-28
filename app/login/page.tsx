@@ -1,6 +1,7 @@
+// app/login/page.tsx
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
@@ -8,6 +9,11 @@ import { useAuth } from "@/components/AuthProvider";
 export default function LoginPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const [permissions, setPermissions] = useState({
+    read: true,
+    activityRead: true,
+    activityWrite: false,
+  });
 
   useEffect(() => {
     if (user) {
@@ -17,8 +23,13 @@ export default function LoginPage() {
 
   const handleStravaLogin = () => {
     const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
-    const redirectUri = `${window.location.origin}/auth/strava/callback`;
-    const scope = "read,activity:read_all,activity:write";
+    const redirectUri = `${window.location.origin}/api/auth/strava/callback`;
+
+    // Build scope based on permissions
+    let scope = "read,activity:read_all";
+    if (permissions.activityWrite) {
+      scope += ",activity:write";
+    }
 
     const stravaAuthUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
 
@@ -92,59 +103,76 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Permissions Info */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h3 className="font-semibold text-yellow-900 mb-3 flex items-center">
+          {/* Permissions Selection */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-semibold text-blue-900 mb-3 flex items-center">
               <AlertCircle className="h-4 w-4 mr-2" />
               Quyền truy cập cần thiết
             </h3>
-            <div className="space-y-2 text-sm text-yellow-800">
-              <label className="flex items-start space-x-2 cursor-default">
+            <div className="space-y-3 text-sm">
+              {/* Read Permission - Always required */}
+              <label className="flex items-start space-x-3 cursor-not-allowed opacity-60">
                 <input
                   type="checkbox"
-                  checked
+                  checked={true}
                   disabled
-                  className="mt-1 cursor-default"
+                  className="mt-1 cursor-not-allowed"
                 />
                 <div>
-                  <strong>Đọc thông tin cá nhân</strong>
-                  <p className="text-yellow-700">
-                    Tên, ảnh đại diện, email để tạo hồ sơ của bạn
+                  <strong className="text-blue-900">
+                    Đọc thông tin cá nhân (Bắt buộc)
+                  </strong>
+                  <p className="text-blue-700">
+                    Tên, ảnh đại diện để tạo hồ sơ của bạn
                   </p>
                 </div>
               </label>
-              <label className="flex items-start space-x-2 cursor-default">
+
+              {/* Activity Read - Always required */}
+              <label className="flex items-start space-x-3 cursor-not-allowed opacity-60">
                 <input
                   type="checkbox"
-                  checked
+                  checked={true}
                   disabled
-                  className="mt-1 cursor-default"
+                  className="mt-1 cursor-not-allowed"
                 />
                 <div>
-                  <strong>Đọc hoạt động</strong>
-                  <p className="text-yellow-700">
+                  <strong className="text-blue-900">
+                    Đọc hoạt động chạy bộ (Bắt buộc)
+                  </strong>
+                  <p className="text-blue-700">
                     Xem các hoạt động chạy bộ của bạn để tính điểm sự kiện
                   </p>
                 </div>
               </label>
-              <label className="flex items-start space-x-2 cursor-default">
+
+              {/* Activity Write - Optional */}
+              <label className="flex items-start space-x-3 cursor-pointer hover:bg-blue-100 p-2 rounded transition-colors">
                 <input
                   type="checkbox"
-                  checked
-                  disabled
-                  className="mt-1 cursor-default"
+                  checked={permissions.activityWrite}
+                  onChange={(e) =>
+                    setPermissions({
+                      ...permissions,
+                      activityWrite: e.target.checked,
+                    })
+                  }
+                  className="mt-1 cursor-pointer"
                 />
                 <div>
-                  <strong>Ghi hoạt động (Tùy chọn)</strong>
-                  <p className="text-yellow-700">
-                    Cập nhật mô tả hoạt động với badge sự kiện
+                  <strong className="text-blue-900">
+                    Ghi hoạt động (Tùy chọn)
+                  </strong>
+                  <p className="text-blue-700">
+                    Cập nhật mô tả hoạt động với badge sự kiện. Bạn có thể bỏ
+                    qua nếu không muốn.
                   </p>
                 </div>
               </label>
             </div>
-            <p className="text-xs text-yellow-700 mt-3 bg-yellow-100 p-2 rounded">
-              <strong>Lưu ý:</strong> Các quyền này được Strava yêu cầu khi kết
-              nối. Bạn có thể thu hồi bất cứ lúc nào trong{" "}
+            <p className="text-xs text-blue-700 mt-3 bg-blue-100 p-2 rounded">
+              <strong>Lưu ý:</strong> Bạn có thể thu hồi quyền truy cập bất cứ
+              lúc nào trong{" "}
               <a
                 href="https://www.strava.com/settings/apps"
                 target="_blank"
@@ -177,8 +205,7 @@ export default function LoginPage() {
             và{" "}
             <a href="/privacy" className="underline">
               Chính sách bảo mật
-            </a>{" "}
-            của chúng tôi.
+            </a>
           </p>
         </div>
 

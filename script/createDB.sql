@@ -389,3 +389,130 @@ CREATE TRIGGER update_admins_updated_at
   BEFORE UPDATE ON admins
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+
+  -- Migration: Create best_efforts table
+-- Run this in Supabase SQL Editor
+
+-- Create best_efforts table to store Strava best efforts
+CREATE TABLE IF NOT EXISTS best_efforts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  strava_activity_id BIGINT NOT NULL,
+  effort_name TEXT NOT NULL, -- "5k", "10k", "Half-Marathon", etc.
+  elapsed_time INTEGER NOT NULL, -- seconds
+  moving_time INTEGER NOT NULL, -- seconds
+  distance DECIMAL NOT NULL, -- meters
+  start_date TIMESTAMPTZ NOT NULL,
+  start_date_local TIMESTAMPTZ NOT NULL,
+  raw_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Unique constraint: one best effort per user, activity, and effort name
+  UNIQUE(user_id, strava_activity_id, effort_name)
+);
+
+-- Create indexes for faster queries
+CREATE INDEX idx_best_efforts_user_id ON best_efforts(user_id);
+CREATE INDEX idx_best_efforts_effort_name ON best_efforts(effort_name);
+CREATE INDEX idx_best_efforts_moving_time ON best_efforts(moving_time);
+CREATE INDEX idx_best_efforts_start_date ON best_efforts(start_date_local);
+
+-- Enable RLS
+ALTER TABLE best_efforts ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+-- Users can read their own best efforts
+CREATE POLICY "Users can read own best efforts"
+  ON best_efforts
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Users can insert their own best efforts
+CREATE POLICY "Users can insert own best efforts"
+  ON best_efforts
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own best efforts
+CREATE POLICY "Users can update own best efforts"
+  ON best_efforts
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- Service role can do everything (for webhook)
+CREATE POLICY "Service role full access"
+  ON best_efforts
+  FOR ALL
+  USING (true);
+
+-- Add best_efforts column to activities table (optional - for caching)
+ALTER TABLE activities 
+ADD COLUMN IF NOT EXISTS best_efforts JSONB;
+
+-- Update events table to support time ranges
+ALTER TABLE events
+ALTER COLUMN start_date TYPE TIMESTAMPTZ USING start_date::TIMESTAMPTZ,
+ALTER COLUMN end_date TYPE TIMESTAMPTZ USING end_date::TIMESTAMPTZ;
+
+-- Add max_teams column to events
+ALTER TABLE events
+ADD COLUMN IF NOT EXISTS max_teams INTEGER;
+
+-- Create function to get user PRs (Personal Records)
+CREATE OR REPLACE FUNCTION get_user_prs(p_user_id UUID)
+RETURNS TABLE (
+  effort_name TEXT,
+  best_time INTEGER,
+  activity_date TIMESTAMPTZ,
+  strava_activity_id BIGINT
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT DISTINCT ON (be.effort_name)
+    be.effort_name,
+    be.moving_time as best_time,
+    be.start_date_local as activity_date,
+    be.strava_activity_id
+  FROM best_efforts be
+  WHERE be.user_id = p_user_id
+  ORDER BY be.effort_name, be.moving_time ASC, be.start_date_local DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create function to get leaderboard for specific effort
+CREATE OR REPLACE FUNCTION get_effort_leaderboard(
+  p_effort_name TEXT,
+  p_limit INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+  user_id UUID,
+  username TEXT,
+  full_name TEXT,
+  avatar_url TEXT,
+  best_time INTEGER,
+  activity_date TIMESTAMPTZ
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT DISTINCT ON (be.user_id)
+    u.id as user_id,
+    u.username,
+    u.full_name,
+    u.avatar_url,
+    be.moving_time as best_time,
+    be.start_date_local as activity_date
+  FROM best_efforts be
+  JOIN users u ON u.id = be.user_id
+  WHERE be.effort_name = p_effort_name
+  ORDER BY be.user_id, be.moving_time ASC
+  LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Comments for documentation
+COMMENT ON TABLE best_efforts IS 'Stores Strava best effort segments from activities';
+COMMENT ON COLUMN best_efforts.effort_name IS 'Distance name: 5k, 10k, Half-Marathon, Marathon, etc.';
+COMMENT ON COLUMN best_efforts.moving_time IS 'Time in seconds (excluding stops)';
+COMMENT ON COLUMN best_efforts.elapsed_time IS 'Total time in seconds (including stops)';

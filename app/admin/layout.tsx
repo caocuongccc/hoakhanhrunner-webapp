@@ -1,3 +1,4 @@
+// app/admin/layout.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -35,19 +36,17 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState("");
 
   useEffect(() => {
-    // Không redirect nếu đang ở trang login
-    if (pathname !== "/admin/login" && !loading && !admin) {
-      router.push("/admin/login");
+    if (pathname !== "/admin-login" && !loading && !admin) {
+      router.push("/admin-login");
     }
   }, [admin, loading, router, pathname]);
 
   useEffect(() => {
-    // Get current path
     setActiveTab(pathname);
   }, [pathname]);
 
-  // Nếu đang ở trang login, không cần check auth
-  if (pathname === "/admin/login") {
+  // Nếu đang ở trang login, không cần layout
+  if (pathname === "/admin-login") {
     return <>{children}</>;
   }
 
@@ -79,59 +78,56 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Admin Layout - Không có top navigation */}
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-md min-h-screen flex flex-col">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-bold text-gray-900">Admin Panel</h2>
-            <p className="text-sm text-gray-600 mt-1">{admin.email}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              Role: {admin.role === "super_admin" ? "Super Admin" : "Admin"}
-            </p>
-          </div>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar - Full height */}
+      <aside className="w-64 bg-white shadow-md flex flex-col fixed h-full">
+        <div className="p-6 border-b">
+          <h2 className="text-xl font-bold text-gray-900">Admin Panel</h2>
+          <p className="text-sm text-gray-600 mt-1">{admin.email}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Role: {admin.role === "super_admin" ? "Super Admin" : "Admin"}
+          </p>
+        </div>
 
-          <nav className="p-4 space-y-1 flex-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                activeTab === item.href ||
-                (activeTab.startsWith(item.href) && item.href !== "/admin");
+        <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              activeTab === item.href ||
+              (activeTab.startsWith(item.href) && item.href !== "/admin");
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? "bg-blue-50 text-blue-600"
-                      : "text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium">{item.label}</span>
-                  {isActive && <ChevronRight className="h-4 w-4 ml-auto" />}
-                </Link>
-              );
-            })}
-          </nav>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  isActive
+                    ? "bg-blue-50 text-blue-600"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                <span className="font-medium">{item.label}</span>
+                {isActive && <ChevronRight className="h-4 w-4 ml-auto" />}
+              </Link>
+            );
+          })}
+        </nav>
 
-          {/* Logout Button */}
-          <div className="p-4 border-t">
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 w-full transition-colors"
-            >
-              <LogOut className="h-5 w-5" />
-              <span className="font-medium">Đăng xuất</span>
-            </button>
-          </div>
-        </aside>
+        {/* Logout Button */}
+        <div className="p-4 border-t">
+          <button
+            onClick={handleLogout}
+            className="flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 w-full transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
+            <span className="font-medium">Đăng xuất</span>
+          </button>
+        </div>
+      </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 p-8">{children}</main>
-      </div>
+      {/* Main Content - Offset by sidebar width */}
+      <main className="flex-1 ml-64 p-8">{children}</main>
     </div>
   );
 }

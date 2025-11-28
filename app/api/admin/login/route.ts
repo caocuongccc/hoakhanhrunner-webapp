@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       .eq("email", email)
       .eq("is_active", true)
       .single();
-
+    console.log("admin", admin);
     console.log("Admin query:", {
       found: !!admin,
       error: adminError,

@@ -1,3 +1,4 @@
+// components/Navigation.tsx
 "use client";
 
 import Link from "next/link";
@@ -17,12 +18,17 @@ export default function Navigation() {
 
   const navItems = [
     { href: "/", label: "Trang chủ", icon: Home },
-    { href: "/events/individual", label: "Sự kiện cá nhân", icon: Calendar },
-    { href: "/events/team", label: "Sự kiện đội", icon: Users },
-    { href: "/activities", label: "Hoạt động", icon: Activity },
-    { href: "/feeds", label: "Bảng tin", icon: Users },
+    { href: "/events", label: "Sự kiện", icon: Calendar },
     { href: "/members", label: "Thành viên", icon: Users },
   ];
+
+  // Only show nav for user pages
+  if (user) {
+    navItems.push(
+      { href: "/activities", label: "Hoạt động của tôi", icon: Activity },
+      { href: "/feeds", label: "Bảng tin", icon: Users }
+    );
+  }
 
   return (
     <nav className="bg-white shadow-md sticky top-0 z-50">
@@ -36,7 +42,7 @@ export default function Navigation() {
             </span>
           </Link>
 
-          {/* Navigation Items */}
+          {/* Navigation Items - Desktop */}
           <div className="hidden md:flex items-center space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -62,24 +68,39 @@ export default function Navigation() {
           </div>
 
           {/* User Menu */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
             {user ? (
               <>
                 <Link
-                  href="/profile"
-                  className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
+                  href="/activities"
+                  className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
                 >
-                  <User className="h-5 w-5" />
-                  <span className="hidden md:inline">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    {user.avatar_url ? (
+                      <img
+                        src={user.avatar_url}
+                        alt={user.username}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-blue-600 font-bold text-sm">
+                        {user.username?.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <span className="hidden md:inline font-medium">
                     {user.full_name || user.username}
                   </span>
                 </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  title="Đăng xuất"
                 >
                   <LogOut className="h-5 w-5" />
-                  <span className="hidden md:inline">Đăng xuất</span>
+                  <span className="hidden md:inline font-medium">
+                    Đăng xuất
+                  </span>
                 </button>
               </>
             ) : (
@@ -87,7 +108,7 @@ export default function Navigation() {
                 href="/login"
                 className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-medium transition-colors"
               >
-                Đăng nhập với Strava
+                Đăng nhập
               </Link>
             )}
           </div>

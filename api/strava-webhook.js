@@ -1,7 +1,6 @@
-// api/strava-webhook.js (CommonJS for Vercel)
+// api/strava-webhook.js - Updated with Best Efforts
 const { createClient } = require("@supabase/supabase-js");
 
-// Initialize Supabase với SERVICE_ROLE_KEY
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY,
@@ -65,7 +64,7 @@ async function getValidAccessToken(userId) {
   return user.strava_access_token;
 }
 
-// Helper: Fetch activity from Strava
+// Helper: Fetch activity with best efforts from Strava
 async function fetchStravaActivity(activityId, accessToken) {
   const response = await fetch(
     `https://www.strava.com/api/v3/activities/${activityId}`,
@@ -76,6 +75,33 @@ async function fetchStravaActivity(activityId, accessToken) {
 
   if (!response.ok) throw new Error("Failed to fetch activity");
   return response.json();
+}
+
+// Helper: Save best efforts to database
+async function saveBestEfforts(userId, activityId, bestEfforts) {
+  if (!bestEfforts || bestEfforts.length === 0) return;
+
+  const records = bestEfforts.map((effort) => ({
+    user_id: userId,
+    strava_activity_id: activityId,
+    effort_name: effort.name,
+    elapsed_time: effort.elapsed_time,
+    moving_time: effort.moving_time,
+    distance: effort.distance,
+    start_date: effort.start_date,
+    start_date_local: effort.start_date_local,
+    raw_data: effort,
+  }));
+
+  const { error } = await supabase.from("best_efforts").upsert(records, {
+    onConflict: "user_id,strava_activity_id,effort_name",
+  });
+
+  if (error) {
+    console.error("Error saving best efforts:", error);
+  } else {
+    console.log(`Saved ${records.length} best efforts`);
+  }
 }
 
 // Update participant stats
@@ -152,75 +178,92 @@ async function updateTeamStats(teamId) {
   }
 }
 
-// Helper: Sync to event activities
+// Helper: Sync to event activities with time check
 async function syncToEventActivities(userId, activity) {
   try {
-    const activityDate = new Date(activity.start_date_local)
-      .toISOString()
-      .split("T")[0];
+    const activityDateTime = new Date(activity.start_date_local);
+    const activityDate = activityDateTime.toISOString().split("T")[0];
 
+    // Get all events user is participating in
     const { data: participations } = await supabase
       .from("event_participants")
       .select("event_id, events!inner(*)")
-      .eq("user_id", userId)
-      .lte("events.start_date", activityDate)
-      .gte("events.end_date", activityDate);
+      .eq("user_id", userId);
 
     if (!participations || participations.length === 0) {
-      console.log("No active events");
+      console.log("No events found for user");
       return;
     }
 
+    // Save best efforts first
+    if (activity.best_efforts && activity.best_efforts.length > 0) {
+      await saveBestEfforts(userId, activity.id, activity.best_efforts);
+    }
+
+    // For each event, check if activity falls within event date-time range
     for (const participation of participations) {
-      const eventId = participation.event_id;
-      const distanceKm = activity.distance / 1000;
-      const paceMinPerKm =
-        activity.moving_time > 0
-          ? activity.moving_time / 60 / distanceKm
+      const event = participation.events;
+      const eventStart = new Date(event.start_date);
+      const eventEnd = new Date(event.end_date);
+
+      // Check if activity is within event time range
+      if (activityDateTime >= eventStart && activityDateTime <= eventEnd) {
+        const eventId = participation.event_id;
+        const distanceKm = activity.distance / 1000;
+        const paceMinPerKm =
+          activity.moving_time > 0
+            ? activity.moving_time / 60 / distanceKm
+            : null;
+        const routeData = activity.map?.summary_polyline
+          ? { polyline: activity.map.summary_polyline }
           : null;
-      const routeData = activity.map?.summary_polyline
-        ? { polyline: activity.map.summary_polyline }
-        : null;
 
-      const { data: existingActivity } = await supabase
-        .from("activities")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("event_id", eventId)
-        .eq("activity_date", activityDate)
-        .single();
-
-      if (existingActivity) {
-        await supabase
+        const { data: existingActivity } = await supabase
           .from("activities")
-          .update({
-            distance_km: distanceKm,
-            duration_seconds: activity.moving_time,
-            pace_min_per_km: paceMinPerKm,
-            route_data: routeData,
-            description: activity.name,
-            points_earned: distanceKm, // 1km = 1 point (simple rule)
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingActivity.id);
-      } else {
-        await supabase.from("activities").insert([
-          {
-            user_id: userId,
-            event_id: eventId,
-            activity_date: activityDate,
-            distance_km: distanceKm,
-            duration_seconds: activity.moving_time,
-            pace_min_per_km: paceMinPerKm,
-            route_data: routeData,
-            description: activity.name,
-            points_earned: distanceKm, // 1km = 1 point
-          },
-        ]);
-      }
+          .select("id")
+          .eq("user_id", userId)
+          .eq("event_id", eventId)
+          .eq("activity_date", activityDate)
+          .single();
 
-      await updateParticipantStats(eventId, userId);
-      console.log(`✅ Synced to event ${eventId}`);
+        if (existingActivity) {
+          await supabase
+            .from("activities")
+            .update({
+              distance_km: distanceKm,
+              duration_seconds: activity.moving_time,
+              pace_min_per_km: paceMinPerKm,
+              route_data: routeData,
+              description: activity.name,
+              points_earned: distanceKm,
+              best_efforts: activity.best_efforts,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existingActivity.id);
+        } else {
+          await supabase.from("activities").insert([
+            {
+              user_id: userId,
+              event_id: eventId,
+              activity_date: activityDate,
+              distance_km: distanceKm,
+              duration_seconds: activity.moving_time,
+              pace_min_per_km: paceMinPerKm,
+              route_data: routeData,
+              description: activity.name,
+              points_earned: distanceKm,
+              best_efforts: activity.best_efforts,
+            },
+          ]);
+        }
+
+        await updateParticipantStats(eventId, userId);
+        console.log(`✅ Synced to event ${eventId} (${event.name})`);
+      } else {
+        console.log(
+          `⏭️ Activity outside event ${event.name} time range: ${activityDateTime.toISOString()} not in [${eventStart.toISOString()}, ${eventEnd.toISOString()}]`
+        );
+      }
     }
   } catch (error) {
     console.error("Error syncing:", error);
@@ -317,7 +360,9 @@ module.exports = async function handler(req, res) {
             return res.status(200).send("OK");
           }
 
-          console.log("✅ Processing:", activity.name);
+          console.log(
+            `✅ Processing: ${activity.name} - Best Efforts: ${activity.best_efforts?.length || 0}`
+          );
 
           await supabase.from("strava_activities").upsert(
             [
@@ -365,6 +410,11 @@ module.exports = async function handler(req, res) {
             .eq("strava_activity_id", object_id);
 
           await supabase
+            .from("best_efforts")
+            .delete()
+            .eq("strava_activity_id", object_id);
+
+          await supabase
             .from("strava_webhook_events")
             .update({
               processed: true,
@@ -373,7 +423,7 @@ module.exports = async function handler(req, res) {
             })
             .eq("id", loggedEvent.id);
 
-          console.log("🗑️ Deleted");
+          console.log("🗑️ Deleted activity and best efforts");
         }
       } catch (error) {
         console.error("❌ Error:", error);
