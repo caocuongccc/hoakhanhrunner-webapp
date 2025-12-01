@@ -1,8 +1,17 @@
+// app/admin/teams/[id]/members/page.tsx - Enhanced with rename & remove
 "use client";
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, UserPlus, Trash2, Search, Crown } from "lucide-react";
+import {
+  ArrowLeft,
+  UserPlus,
+  Trash2,
+  Search,
+  Edit2,
+  Check,
+  X,
+} from "lucide-react";
 import { createSupabaseClient } from "@/lib/supabase";
 import Link from "next/link";
 
@@ -28,6 +37,8 @@ export default function TeamMembersPage() {
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
 
   useEffect(() => {
     loadTeamAndMembers();
@@ -49,6 +60,7 @@ export default function TeamMembersPage() {
 
       if (teamError) throw teamError;
       setTeam(teamData);
+      setNewTeamName(teamData.name);
 
       // Load members
       const { data: membersData, error: membersError } = await supabase
@@ -65,16 +77,40 @@ export default function TeamMembersPage() {
       if (membersError) throw membersError;
       setMembers(membersData || []);
 
-      // Load available users (not in this team)
+      // Load available users (not in this team and not in other teams of the same event)
       const memberIds = (membersData || []).map((m) => m.user_id);
+
+      // Get all users in teams of this event
+      const { data: allTeamsInEvent } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("event_id", teamData.event_id);
+
+      const teamIds = allTeamsInEvent?.map((t) => t.id) || [];
+
+      let unavailableUserIds = [...memberIds];
+
+      if (teamIds.length > 0) {
+        const { data: membersInEvent } = await supabase
+          .from("team_members")
+          .select("user_id")
+          .in("team_id", teamIds);
+
+        unavailableUserIds = [
+          ...new Set([
+            ...memberIds,
+            ...(membersInEvent?.map((m) => m.user_id) || []),
+          ]),
+        ];
+      }
 
       let query = supabase
         .from("users")
         .select("id, username, full_name, avatar_url")
         .order("username", { ascending: true });
 
-      if (memberIds.length > 0) {
-        query = query.not("id", "in", `(${memberIds.join(",")})`);
+      if (unavailableUserIds.length > 0) {
+        query = query.not("id", "in", `(${unavailableUserIds.join(",")})`);
       }
 
       const { data: usersData, error: usersError } = await query;
@@ -85,6 +121,29 @@ export default function TeamMembersPage() {
       alert("Không thể tải thông tin đội");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRenameTeam = async () => {
+    if (!newTeamName.trim()) {
+      alert("Tên đội không được để trống!");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("teams")
+        .update({ name: newTeamName.trim() })
+        .eq("id", teamId);
+
+      if (error) throw error;
+
+      setTeam({ ...team, name: newTeamName.trim() });
+      setEditingName(false);
+      alert("Đã đổi tên đội thành công!");
+    } catch (error: any) {
+      console.error("Error renaming team:", error);
+      alert(`Lỗi: ${error.message}`);
     }
   };
 
@@ -141,9 +200,15 @@ export default function TeamMembersPage() {
     userId: string,
     username: string
   ) => {
-    if (!confirm(`Bạn có chắc muốn xóa ${username} khỏi đội?`)) return;
+    if (
+      !confirm(
+        `Bạn có chắc muốn xóa ${username} khỏi đội?\n\nLý do xóa có thể là:\n- Người lạ vào nhầm\n- Vào sai team\n- Thành viên không hoạt động`
+      )
+    )
+      return;
 
     try {
+      // Remove from team_members
       const { error } = await supabase
         .from("team_members")
         .delete()
@@ -191,27 +256,73 @@ export default function TeamMembersPage() {
           >
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{team?.name}</h1>
-            <p className="text-gray-600 mt-1">
-              {members.length} thành viên
-              {team?.events?.max_team_members &&
-                ` / ${team.events.max_team_members} tối đa`}
-            </p>
+          <div className="flex items-center space-x-3">
+            {editingName ? (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Tên đội mới"
+                />
+                <button
+                  onClick={handleRenameTeam}
+                  className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  title="Lưu"
+                >
+                  <Check className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingName(false);
+                    setNewTeamName(team.name);
+                  }}
+                  className="p-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                  title="Hủy"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  {team?.name}
+                </h1>
+                <button
+                  onClick={() => setEditingName(true)}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                  title="Đổi tên đội"
+                >
+                  <Edit2 className="h-5 w-5" />
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        <button
-          onClick={() => setShowAddMember(!showAddMember)}
-          disabled={
-            team?.events?.max_team_members &&
-            members.length >= team.events.max_team_members
-          }
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <UserPlus className="h-5 w-5" />
-          <span>Thêm thành viên</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <div className="text-right">
+            <p className="text-sm text-gray-600">Thành viên</p>
+            <p className="text-xl font-bold text-gray-900">
+              {members.length}
+              {team?.events?.max_team_members &&
+                ` / ${team.events.max_team_members}`}
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowAddMember(!showAddMember)}
+            disabled={
+              team?.events?.max_team_members &&
+              members.length >= team.events.max_team_members
+            }
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <UserPlus className="h-5 w-5" />
+            <span>Thêm thành viên</span>
+          </button>
+        </div>
       </div>
 
       {/* Add Member Panel */}
@@ -235,7 +346,7 @@ export default function TeamMembersPage() {
               <div className="p-8 text-center text-gray-500">
                 {searchTerm
                   ? "Không tìm thấy người dùng"
-                  : "Không còn người dùng khả dụng"}
+                  : "Không còn người dùng khả dụng (tất cả đã ở trong các đội khác)"}
               </div>
             ) : (
               filteredUsers.map((user) => (
@@ -296,66 +407,53 @@ export default function TeamMembersPage() {
           </div>
         ) : (
           <div className="divide-y">
-            {members.map((member) => {
-              const isCaptain = member.user_id === team.captain_id;
-
-              return (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between p-6 hover:bg-gray-50"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center">
-                      {member.users.avatar_url ? (
-                        <img
-                          src={member.users.avatar_url}
-                          alt={member.users.username}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-gray-600 font-bold text-lg">
-                          {member.users.username.charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <p className="font-medium text-gray-900">
-                          {member.users.username}
-                        </p>
-                        {isCaptain && (
-                          <span className="inline-flex items-center space-x-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
-                            <Crown className="h-3 w-3" />
-                            <span>Đội trưởng</span>
-                          </span>
-                        )}
-                      </div>
-                      {member.users.full_name && (
-                        <p className="text-sm text-gray-600">
-                          {member.users.full_name}
-                        </p>
-                      )}
-                    </div>
+            {members.map((member) => (
+              <div
+                key={member.id}
+                className="flex items-center justify-between p-6 hover:bg-gray-50"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center">
+                    {member.users.avatar_url ? (
+                      <img
+                        src={member.users.avatar_url}
+                        alt={member.users.username}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-gray-600 font-bold text-lg">
+                        {member.users.username.charAt(0).toUpperCase()}
+                      </span>
+                    )}
                   </div>
-
-                  {!isCaptain && (
-                    <button
-                      onClick={() =>
-                        removeMember(
-                          member.id,
-                          member.user_id,
-                          member.users.username
-                        )
-                      }
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Xóa khỏi đội"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  )}
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {member.users.username}
+                    </p>
+                    {member.users.full_name && (
+                      <p className="text-sm text-gray-600">
+                        {member.users.full_name}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              );
-            })}
+
+                <button
+                  onClick={() =>
+                    removeMember(
+                      member.id,
+                      member.user_id,
+                      member.users.username
+                    )
+                  }
+                  className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Xóa khỏi đội"
+                >
+                  <Trash2 className="h-5 w-5" />
+                  <span>Xóa</span>
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </div>

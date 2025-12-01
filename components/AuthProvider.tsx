@@ -1,3 +1,4 @@
+// components/AuthProvider.tsx - Fixed logout
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
@@ -35,9 +36,7 @@ export default function AuthProvider({
 
   const loadUser = async () => {
     try {
-      // Check if user_id cookie exists via API call
       const response = await fetch("/api/auth/session");
-      console.log("Response from /api/auth/session:", response);
       const data = await response.json();
 
       if (data.user) {
@@ -56,9 +55,10 @@ export default function AuthProvider({
 
   const signOut = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/strava/logout", { method: "POST" });
       setUser(null);
-      window.location.href = "/login";
+      // Redirect to home page instead of login
+      window.location.href = "/";
     } catch (error) {
       console.error("Error signing out:", error);
     }

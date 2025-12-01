@@ -1,4 +1,4 @@
-// app/admin/events/create/page.tsx
+// app/admin/events/create/page.tsx - With Auto Team Generation
 "use client";
 
 import { useState } from "react";
@@ -26,7 +26,7 @@ export default function CreateEventPage() {
     end_time: "23:59",
     password: "",
     max_team_members: "",
-    max_teams: "",
+    num_teams: "", // Số lượng team cần tạo
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,8 +71,8 @@ export default function CreateEventPage() {
 
     try {
       // Validate dates
-      const startDateTime = `${formData.start_date}T${formData.start_time}`;
-      const endDateTime = `${formData.end_date}T${formData.end_time}`;
+      const startDateTime = `${formData.start_date}T${formData.start_time}:00`;
+      const endDateTime = `${formData.end_date}T${formData.end_time}:00`;
 
       if (new Date(endDateTime) < new Date(startDateTime)) {
         alert("Thời gian kết thúc phải sau thời gian bắt đầu!");
@@ -80,11 +80,26 @@ export default function CreateEventPage() {
         return;
       }
 
-      // Validate team event rules
-      if (formData.event_type === "team" && selectedRules.length === 0) {
-        alert("Sự kiện theo đội phải chọn ít nhất 1 luật chơi!");
-        setLoading(false);
-        return;
+      // Validate team event requirements
+      if (formData.event_type === "team") {
+        if (selectedRules.length === 0) {
+          alert("Sự kiện theo đội phải chọn ít nhất 1 luật chơi!");
+          setLoading(false);
+          return;
+        }
+        if (!formData.num_teams || parseInt(formData.num_teams) < 2) {
+          alert("Số đội phải ít nhất 2!");
+          setLoading(false);
+          return;
+        }
+        if (
+          !formData.max_team_members ||
+          parseInt(formData.max_team_members) < 1
+        ) {
+          alert("Số thành viên tối đa phải ít nhất 1!");
+          setLoading(false);
+          return;
+        }
       }
 
       // Upload image if exists
@@ -93,7 +108,7 @@ export default function CreateEventPage() {
         imageUrl = await uploadImage();
       }
 
-      // Get current user from cookie
+      // Get current user from session
       const sessionResponse = await fetch("/api/auth/session");
       const sessionData = await sessionResponse.json();
 
@@ -104,7 +119,7 @@ export default function CreateEventPage() {
       }
 
       // Create event
-      const { data: event, error } = await supabase
+      const { data: event, error: eventError } = await supabase
         .from("events")
         .insert([
           {
@@ -117,7 +132,7 @@ export default function CreateEventPage() {
             max_team_members: formData.max_team_members
               ? parseInt(formData.max_team_members)
               : null,
-            max_teams: formData.max_teams ? parseInt(formData.max_teams) : null,
+            max_teams: formData.num_teams ? parseInt(formData.num_teams) : null,
             image_url: imageUrl,
             created_by: sessionData.user.id,
           },
@@ -125,9 +140,9 @@ export default function CreateEventPage() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (eventError) throw eventError;
 
-      // Add selected rules (chỉ với team events)
+      // Add selected rules for team events
       if (formData.event_type === "team" && selectedRules.length > 0) {
         const ruleInserts = selectedRules.map((ruleId) => ({
           event_id: event.id,
@@ -143,7 +158,33 @@ export default function CreateEventPage() {
         }
       }
 
-      alert("Tạo sự kiện thành công!");
+      // Auto-generate teams for team events
+      if (formData.event_type === "team" && formData.num_teams) {
+        const numTeams = parseInt(formData.num_teams);
+        const teamsToCreate = [];
+
+        for (let i = 1; i <= numTeams; i++) {
+          teamsToCreate.push({
+            event_id: event.id,
+            name: `Team ${i}`,
+            total_points: 0,
+          });
+        }
+
+        const { error: teamsError } = await supabase
+          .from("teams")
+          .insert(teamsToCreate);
+
+        if (teamsError) {
+          console.error("Error creating teams:", teamsError);
+          alert("Tạo sự kiện thành công nhưng có lỗi khi tạo các đội!");
+        } else {
+          alert(`Tạo sự kiện thành công với ${numTeams} đội!`);
+        }
+      } else {
+        alert("Tạo sự kiện thành công!");
+      }
+
       router.push("/admin/events");
     } catch (error: any) {
       console.error("Error creating event:", error);
@@ -166,7 +207,7 @@ export default function CreateEventPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Tạo sự kiện mới</h1>
           <p className="text-gray-600 mt-1">
-            Điền thông tin sự kiện và cấu hình luật chơi
+            Điền thông tin sự kiện và cấu hình
           </p>
         </div>
       </div>
@@ -232,7 +273,7 @@ export default function CreateEventPage() {
                   }
                   className="w-4 h-4 text-blue-600"
                 />
-                <span>Cá nhân (không cần luật)</span>
+                <span>Cá nhân (không cần luật, chỉ lấy tracklog)</span>
               </label>
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
@@ -254,39 +295,52 @@ export default function CreateEventPage() {
 
           {/* Team Settings */}
           {formData.event_type === "team" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-purple-50 rounded-lg">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Số đội tối đa
-                </label>
-                <input
-                  type="number"
-                  min="2"
-                  value={formData.max_teams}
-                  onChange={(e) =>
-                    setFormData({ ...formData, max_teams: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="VD: 10 đội"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Số thành viên tối đa mỗi đội
-                </label>
-                <input
-                  type="number"
-                  min="2"
-                  value={formData.max_team_members}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      max_team_members: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="VD: 5 người"
-                />
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-4">
+              <h3 className="font-semibold text-purple-900">
+                Cấu hình đội thi đấu
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Số đội tham gia <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="2"
+                    required
+                    value={formData.num_teams}
+                    onChange={(e) =>
+                      setFormData({ ...formData, num_teams: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="VD: 10 đội"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Hệ thống sẽ tự động tạo các team: Team 1, Team 2, ...
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Số người tối đa/đội <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={formData.max_team_members}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        max_team_members: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="VD: 5 người"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Giới hạn số thành viên trong mỗi đội
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -353,6 +407,13 @@ export default function CreateEventPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-sm text-blue-800">
+              <strong>Lưu ý:</strong> Chỉ các hoạt động chạy bộ diễn ra trong
+              khoảng thời gian này mới được tính vào sự kiện
+            </p>
           </div>
 
           {/* Password */}

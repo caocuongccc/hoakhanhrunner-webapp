@@ -1,4 +1,4 @@
-// components/Navigation.tsx
+// components/Navigation.tsx - Fixed version from GitHub
 "use client";
 
 import Link from "next/link";
@@ -22,10 +22,10 @@ export default function Navigation() {
     { href: "/members", label: "Thành viên", icon: Users },
   ];
 
-  // Only show nav for user pages
+  // Add user-specific items when logged in
   if (user) {
     navItems.push(
-      { href: "/activities", label: "Hoạt động của tôi", icon: Activity },
+      { href: "/activities", label: "Hoạt động", icon: Activity },
       { href: "/feeds", label: "Bảng tin", icon: Users }
     );
   }
@@ -73,7 +73,7 @@ export default function Navigation() {
               <>
                 <Link
                   href="/activities"
-                  className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  className="flex items-center space-x-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
                 >
                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                     {user.avatar_url ? (

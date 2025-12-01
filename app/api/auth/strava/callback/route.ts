@@ -1,7 +1,121 @@
+// app/api/auth/strava/callback/route.ts - With Auto Sync
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeStravaCode } from "@/lib/strava";
 import { supabase } from "@/lib/supabase";
 import { cookies } from "next/headers";
+
+/**
+ * Auto sync activities in background after login
+ */
+async function autoSyncActivities(userId: string, accessToken: string) {
+  try {
+    console.log("🔄 Auto-syncing 50 recent activities...");
+
+    // Fetch 50 recent activities from Strava
+    const response = await fetch(
+      `https://www.strava.com/api/v3/athlete/activities?per_page=50&page=1`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Failed to fetch activities for auto-sync");
+      return;
+    }
+
+    const activities = await response.json();
+    const runningActivities = activities.filter(
+      (a: any) => a.sport_type === "Run" || a.type === "Run"
+    );
+
+    console.log(
+      `📊 Found ${runningActivities.length} running activities out of ${activities.length} total`
+    );
+
+    // Get user's strava_id
+    const { data: user } = await supabase
+      .from("users")
+      .select("strava_id")
+      .eq("id", userId)
+      .single();
+
+    if (!user) return;
+
+    // Save each running activity
+    for (const activity of runningActivities) {
+      // Fetch detailed activity to get best efforts
+      const detailResponse = await fetch(
+        `https://www.strava.com/api/v3/activities/${activity.id}`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+
+      if (!detailResponse.ok) continue;
+
+      const detailedActivity = await detailResponse.json();
+
+      // Save to strava_activities
+      await supabase.from("strava_activities").upsert(
+        [
+          {
+            strava_activity_id: detailedActivity.id,
+            user_id: userId,
+            athlete_id: user.strava_id,
+            name: detailedActivity.name,
+            distance: detailedActivity.distance,
+            moving_time: detailedActivity.moving_time,
+            elapsed_time: detailedActivity.elapsed_time,
+            total_elevation_gain: detailedActivity.total_elevation_gain,
+            sport_type: detailedActivity.sport_type,
+            start_date: detailedActivity.start_date,
+            start_date_local: detailedActivity.start_date_local,
+            timezone: detailedActivity.timezone,
+            map_summary_polyline: detailedActivity.map?.summary_polyline,
+            average_speed: detailedActivity.average_speed,
+            max_speed: detailedActivity.max_speed,
+            average_heartrate: detailedActivity.average_heartrate,
+            max_heartrate: detailedActivity.max_heartrate,
+            has_heartrate: detailedActivity.has_heartrate,
+            raw_data: detailedActivity,
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        { onConflict: "strava_activity_id" }
+      );
+
+      // Save best efforts if available
+      if (
+        detailedActivity.best_efforts &&
+        detailedActivity.best_efforts.length > 0
+      ) {
+        const records = detailedActivity.best_efforts.map((effort: any) => ({
+          user_id: userId,
+          strava_activity_id: detailedActivity.id,
+          effort_name: effort.name,
+          elapsed_time: effort.elapsed_time,
+          moving_time: effort.moving_time,
+          distance: effort.distance,
+          start_date: effort.start_date,
+          start_date_local: effort.start_date_local,
+          raw_data: effort,
+        }));
+
+        await supabase.from("best_efforts").upsert(records, {
+          onConflict: "user_id,strava_activity_id,effort_name",
+        });
+      }
+    }
+
+    console.log(
+      `✅ Auto-sync completed: ${runningActivities.length} activities synced`
+    );
+  } catch (error) {
+    console.error("❌ Auto-sync error:", error);
+    // Don't throw - this is background process
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,6 +160,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     let userId: string;
+    let isNewUser = false;
 
     if (existingUser) {
       // Update existing user's tokens
@@ -64,12 +179,13 @@ export async function GET(request: NextRequest) {
         .eq("id", userId);
     } else {
       // Create new user
+      isNewUser = true;
       const username =
         athlete.username ||
         `${athlete.firstname}_${athlete.lastname}`
           .toLowerCase()
           .replace(/\s+/g, "_");
-      const email = `strava_${athlete.id}@temp.local`; // Strava doesn't provide email in basic scope
+      const email = `strava_${athlete.id}@temp.local`;
 
       const { data: newUser, error: createError } = await supabase
         .from("users")
@@ -111,9 +227,14 @@ export async function GET(request: NextRequest) {
       path: "/",
     });
 
+    // Auto-sync 50 recent activities in background (don't await)
+    autoSyncActivities(userId, tokens.access_token).catch((err) => {
+      console.error("Background sync error:", err);
+    });
+
     // Redirect to home page with success
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/?auth=success`
+      `${process.env.NEXT_PUBLIC_APP_URL}/?auth=success${isNewUser ? "&new_user=true" : ""}`
     );
   } catch (error: any) {
     console.error("Strava callback error:", error);
