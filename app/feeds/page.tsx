@@ -1,4 +1,4 @@
-// app/feeds/page.tsx - FIXED VERSION
+// app/feeds/page.tsx - FIXED: Show strava_activities from last 30 days
 "use client";
 
 import { useEffect, useState } from "react";
@@ -12,21 +12,22 @@ import {
   MapPin,
   Clock,
   TrendingUp,
+  Calendar,
 } from "lucide-react";
 import { createSupabaseClient } from "@/lib/supabase";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 
-type ActivityFeed = {
+type StravaActivityFeed = {
   id: string;
+  strava_activity_id: number;
   user_id: string;
-  event_id: string;
-  activity_date: string;
-  distance_km: number;
-  duration_seconds: number;
-  pace_min_per_km?: number;
-  description?: string;
-  points_earned: number;
+  name: string;
+  distance: number;
+  moving_time: number;
+  average_speed: number;
+  start_date_local: string;
+  map_summary_polyline?: string;
   created_at: string;
   users: {
     id: string;
@@ -34,17 +35,13 @@ type ActivityFeed = {
     avatar_url?: string;
     username: string;
   };
-  events: {
-    id: string;
-    name: string;
-  };
 };
 
 export default function FeedsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const supabase = createSupabaseClient();
-  const [activities, setActivities] = useState<ActivityFeed[]>([]);
+  const [activities, setActivities] = useState<StravaActivityFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "following" | "mine">("all");
 
@@ -63,24 +60,34 @@ export default function FeedsPage() {
     try {
       setLoading(true);
 
+      // Get activities from last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
       let query = supabase
-        .from("activities")
+        .from("strava_activities")
         .select(
           `
-          *,
-          users!activities_user_id_fkey (
+          id,
+          strava_activity_id,
+          user_id,
+          name,
+          distance,
+          moving_time,
+          average_speed,
+          start_date_local,
+          map_summary_polyline,
+          created_at,
+          users!strava_activities_user_id_fkey (
             id,
             full_name,
             avatar_url,
             username
-          ),
-          events!activities_event_id_fkey (
-            id,
-            name
           )
         `
         )
-        .order("activity_date", { ascending: false })
+        .gte("start_date_local", thirtyDaysAgo.toISOString())
+        .order("start_date_local", { ascending: false })
         .limit(50);
 
       // Filter by mine
@@ -112,10 +119,11 @@ export default function FeedsPage() {
     return `${minutes}m`;
   };
 
-  const formatPace = (paceMinPerKm?: number) => {
-    if (!paceMinPerKm) return "N/A";
-    const minutes = Math.floor(paceMinPerKm);
-    const seconds = Math.floor((paceMinPerKm - minutes) * 60);
+  const formatPace = (distanceMeters: number, movingTimeSeconds: number) => {
+    if (distanceMeters === 0 || movingTimeSeconds === 0) return "N/A";
+    const paceSeconds = (movingTimeSeconds / distanceMeters) * 1000;
+    const minutes = Math.floor(paceSeconds / 60);
+    const seconds = Math.floor(paceSeconds % 60);
     return `${minutes}:${seconds.toString().padStart(2, "0")} /km`;
   };
 
@@ -134,7 +142,7 @@ export default function FeedsPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Bảng tin</h1>
           <p className="text-gray-600">
-            Theo dõi hoạt động của cộng đồng chạy bộ
+            Hoạt động chạy bộ 30 ngày gần đây từ Strava
           </p>
         </div>
 
@@ -183,7 +191,8 @@ export default function FeedsPage() {
                 Chưa có hoạt động nào
               </h3>
               <p className="text-gray-600">
-                Các hoạt động chạy bộ sẽ được hiển thị ở đây
+                Các hoạt động chạy bộ từ Strava 30 ngày gần đây sẽ hiển thị ở
+                đây
               </p>
             </div>
           ) : (
@@ -214,21 +223,14 @@ export default function FeedsPage() {
                       {activity.users.full_name || activity.users.username}
                     </h3>
                     <div className="flex items-center space-x-2 text-sm text-gray-500">
+                      <Calendar className="h-3 w-3" />
                       <span>
                         {format(
-                          new Date(activity.activity_date),
-                          "dd MMM yyyy",
+                          new Date(activity.start_date_local),
+                          "dd MMM yyyy, HH:mm",
                           { locale: vi }
                         )}
                       </span>
-                      {activity.events && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate">
-                            {activity.events.name}
-                          </span>
-                        </>
-                      )}
                     </div>
                   </div>
                   <Activity className="h-5 w-5 text-orange-500 flex-shrink-0" />
@@ -236,11 +238,9 @@ export default function FeedsPage() {
 
                 {/* Activity Details */}
                 <div className="px-4 pb-4">
-                  {activity.description && (
-                    <h4 className="font-semibold text-lg text-gray-900 mb-3">
-                      {activity.description}
-                    </h4>
-                  )}
+                  <h4 className="font-semibold text-lg text-gray-900 mb-3">
+                    {activity.name}
+                  </h4>
 
                   {/* Stats Grid */}
                   <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-lg p-4">
@@ -249,7 +249,7 @@ export default function FeedsPage() {
                         <MapPin className="h-4 w-4 text-gray-500 mr-1" />
                       </div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {activity.distance_km.toFixed(2)}
+                        {(activity.distance / 1000).toFixed(2)}
                       </div>
                       <div className="text-xs text-gray-500">km</div>
                     </div>
@@ -258,7 +258,7 @@ export default function FeedsPage() {
                         <Clock className="h-4 w-4 text-gray-500 mr-1" />
                       </div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {formatDuration(activity.duration_seconds)}
+                        {formatDuration(activity.moving_time)}
                       </div>
                       <div className="text-xs text-gray-500">thời gian</div>
                     </div>
@@ -267,17 +267,22 @@ export default function FeedsPage() {
                         <TrendingUp className="h-4 w-4 text-gray-500 mr-1" />
                       </div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {formatPace(activity.pace_min_per_km)}
+                        {formatPace(activity.distance, activity.moving_time)}
                       </div>
                       <div className="text-xs text-gray-500">pace</div>
                     </div>
                   </div>
 
-                  {/* Points */}
-                  <div className="mt-3 flex items-center text-sm">
-                    <div className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-semibold">
-                      {activity.points_earned.toFixed(2)} điểm
-                    </div>
+                  {/* Strava Link */}
+                  <div className="mt-3">
+                    <a
+                      href={`https://www.strava.com/activities/${activity.strava_activity_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      Xem trên Strava →
+                    </a>
                   </div>
                 </div>
 

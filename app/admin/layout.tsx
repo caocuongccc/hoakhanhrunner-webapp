@@ -1,4 +1,4 @@
-// app/admin/layout.tsx - WITH CERTIFICATE MENU
+// app/admin/layout.tsx - FIXED: Remove top menu, fix logout button
 "use client";
 
 import { useEffect, useState } from "react";
@@ -16,7 +16,6 @@ import {
   ChevronRight,
   LogOut,
   Award,
-  FileText,
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -116,7 +115,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Logout Button - Always visible at bottom */}
+        {/* Logout Button - Fixed positioning */}
         <div className="p-4 border-t bg-white">
           <button
             onClick={handleLogout}
@@ -128,7 +127,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content - NO TOP MENU */}
       <main className="flex-1 ml-64 p-8">{children}</main>
     </div>
   );
