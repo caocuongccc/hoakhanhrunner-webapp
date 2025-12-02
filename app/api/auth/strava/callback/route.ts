@@ -1,19 +1,69 @@
-// app/api/auth/strava/callback/route.ts - With Auto Sync
+// app/api/auth/strava/callback/route.ts - IMPROVED VERSION
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeStravaCode } from "@/lib/strava";
 import { supabase } from "@/lib/supabase";
 import { cookies } from "next/headers";
 
 /**
+ * Save/update best efforts - ONLY KEEP THE FASTEST TIME
+ */
+async function saveBestEfforts(
+  userId: string,
+  activityId: number,
+  bestEfforts: any[]
+) {
+  if (!bestEfforts || bestEfforts.length === 0) return;
+
+  for (const effort of bestEfforts) {
+    // Check if we already have a record for this distance
+    const { data: existingPR } = await supabase
+      .from("best_efforts")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("effort_name", effort.name)
+      .order("elapsed_time", { ascending: true })
+      .limit(1)
+      .single();
+
+    // If new time is faster, replace the old record
+    if (!existingPR || effort.elapsed_time < existingPR.elapsed_time) {
+      // Delete old record if exists
+      if (existingPR) {
+        await supabase
+          .from("best_efforts")
+          .delete()
+          .eq("user_id", userId)
+          .eq("effort_name", effort.name);
+      }
+
+      // Insert new PR
+      await supabase.from("best_efforts").insert({
+        user_id: userId,
+        strava_activity_id: activityId,
+        effort_name: effort.name,
+        elapsed_time: effort.elapsed_time,
+        moving_time: effort.moving_time,
+        distance: effort.distance,
+        start_date: effort.start_date,
+        start_date_local: effort.start_date_local,
+        raw_data: effort,
+      });
+
+      console.log(`✅ New PR for ${effort.name}: ${effort.elapsed_time}s`);
+    }
+  }
+}
+
+/**
  * Auto sync activities in background after login
  */
 async function autoSyncActivities(userId: string, accessToken: string) {
   try {
-    console.log("🔄 Auto-syncing 50 recent activities...");
+    console.log("🔄 Auto-syncing 30 recent activities...");
 
-    // Fetch 50 recent activities from Strava
+    // Fetch 30 recent activities
     const response = await fetch(
-      `https://www.strava.com/api/v3/athlete/activities?per_page=50&page=1`,
+      `https://www.strava.com/api/v3/athlete/activities?per_page=30&page=1`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
@@ -33,7 +83,6 @@ async function autoSyncActivities(userId: string, accessToken: string) {
       `📊 Found ${runningActivities.length} running activities out of ${activities.length} total`
     );
 
-    // Get user's strava_id
     const { data: user } = await supabase
       .from("users")
       .select("strava_id")
@@ -42,9 +91,10 @@ async function autoSyncActivities(userId: string, accessToken: string) {
 
     if (!user) return;
 
-    // Save each running activity
+    let syncedCount = 0;
+
     for (const activity of runningActivities) {
-      // Fetch detailed activity to get best efforts
+      // Fetch detailed activity for best efforts and polyline
       const detailResponse = await fetch(
         `https://www.strava.com/api/v3/activities/${activity.id}`,
         {
@@ -57,7 +107,7 @@ async function autoSyncActivities(userId: string, accessToken: string) {
       const detailedActivity = await detailResponse.json();
 
       // Save to strava_activities
-      await supabase.from("strava_activities").upsert(
+      const { error } = await supabase.from("strava_activities").upsert(
         [
           {
             strava_activity_id: detailedActivity.id,
@@ -85,35 +135,147 @@ async function autoSyncActivities(userId: string, accessToken: string) {
         { onConflict: "strava_activity_id" }
       );
 
-      // Save best efforts if available
-      if (
-        detailedActivity.best_efforts &&
-        detailedActivity.best_efforts.length > 0
-      ) {
-        const records = detailedActivity.best_efforts.map((effort: any) => ({
-          user_id: userId,
-          strava_activity_id: detailedActivity.id,
-          effort_name: effort.name,
-          elapsed_time: effort.elapsed_time,
-          moving_time: effort.moving_time,
-          distance: effort.distance,
-          start_date: effort.start_date,
-          start_date_local: effort.start_date_local,
-          raw_data: effort,
-        }));
+      if (!error) {
+        // Save best efforts (only keep fastest)
+        if (
+          detailedActivity.best_efforts &&
+          detailedActivity.best_efforts.length > 0
+        ) {
+          await saveBestEfforts(
+            userId,
+            detailedActivity.id,
+            detailedActivity.best_efforts
+          );
+        }
 
-        await supabase.from("best_efforts").upsert(records, {
-          onConflict: "user_id,strava_activity_id,effort_name",
-        });
+        // Sync to events
+        await syncToEventActivities(userId, detailedActivity);
+        syncedCount++;
       }
     }
 
-    console.log(
-      `✅ Auto-sync completed: ${runningActivities.length} activities synced`
-    );
+    console.log(`✅ Auto-sync completed: ${syncedCount} activities synced`);
   } catch (error) {
     console.error("❌ Auto-sync error:", error);
-    // Don't throw - this is background process
+  }
+}
+
+/**
+ * Sync activity to event activities
+ */
+async function syncToEventActivities(userId: string, activity: any) {
+  try {
+    const activityDateTime = new Date(activity.start_date_local);
+    const activityDate = activityDateTime.toISOString().split("T")[0];
+
+    const { data: participations } = await supabase
+      .from("event_participants")
+      .select("event_id, events!inner(*)")
+      .eq("user_id", userId);
+
+    if (!participations || participations.length === 0) return;
+
+    for (const participation of participations) {
+      const event = participation.events;
+      const eventStart = new Date(event.start_date);
+      const eventEnd = new Date(event.end_date);
+
+      if (activityDateTime >= eventStart && activityDateTime <= eventEnd) {
+        const eventId = participation.event_id;
+        const distanceKm = activity.distance / 1000;
+        const paceMinPerKm =
+          activity.moving_time > 0
+            ? activity.moving_time / 60 / distanceKm
+            : null;
+
+        const routeData = activity.map?.summary_polyline
+          ? { polyline: activity.map.summary_polyline }
+          : null;
+
+        const { data: existingActivity } = await supabase
+          .from("activities")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("event_id", eventId)
+          .eq("activity_date", activityDate)
+          .single();
+
+        if (existingActivity) {
+          await supabase
+            .from("activities")
+            .update({
+              distance_km: distanceKm,
+              duration_seconds: activity.moving_time,
+              pace_min_per_km: paceMinPerKm,
+              route_data: routeData,
+              description: activity.name,
+              points_earned: distanceKm,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existingActivity.id);
+        } else {
+          await supabase.from("activities").insert([
+            {
+              user_id: userId,
+              event_id: eventId,
+              activity_date: activityDate,
+              distance_km: distanceKm,
+              duration_seconds: activity.moving_time,
+              pace_min_per_km: paceMinPerKm,
+              route_data: routeData,
+              description: activity.name,
+              points_earned: distanceKm,
+            },
+          ]);
+        }
+
+        // Update event_participants stats
+        await updateParticipantStats(eventId, userId);
+
+        console.log(`✅ Synced to event ${eventId}`);
+      }
+    }
+  } catch (error) {
+    console.error("Error syncing to events:", error);
+  }
+}
+
+/**
+ * Update event_participants total_km and total_points
+ */
+async function updateParticipantStats(eventId: string, userId: string) {
+  try {
+    const { data: activities } = await supabase
+      .from("activities")
+      .select("distance_km, points_earned")
+      .eq("event_id", eventId)
+      .eq("user_id", userId);
+
+    if (!activities || activities.length === 0) return;
+
+    const totalKm = activities.reduce(
+      (sum, a) => sum + (a.distance_km || 0),
+      0
+    );
+    const totalPoints = activities.reduce(
+      (sum, a) => sum + (a.points_earned || 0),
+      0
+    );
+
+    await supabase
+      .from("event_participants")
+      .update({
+        total_km: totalKm,
+        total_points: totalPoints,
+      })
+      .eq("event_id", eventId)
+      .eq("user_id", userId);
+
+    console.log(
+      `📊 Updated participant stats: ${totalKm.toFixed(2)}km, ${totalPoints.toFixed(2)} pts`
+    );
+  } catch (error) {
+    console.error("Error updating participant stats:", error);
   }
 }
 
@@ -136,7 +298,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check if user approved all required scopes
     const requiredScopes = ["read", "activity:read_all"];
     const approvedScopes = scope?.split(",") || [];
     const hasAllScopes = requiredScopes.every((s) =>
@@ -149,10 +310,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Exchange code for tokens
     const { tokens, athlete } = await exchangeStravaCode(code);
 
-    // Check if user already exists
     const { data: existingUser } = await supabase
       .from("users")
       .select("*")
@@ -163,7 +322,6 @@ export async function GET(request: NextRequest) {
     let isNewUser = false;
 
     if (existingUser) {
-      // Update existing user's tokens
       userId = existingUser.id;
       await supabase
         .from("users")
@@ -178,7 +336,6 @@ export async function GET(request: NextRequest) {
         })
         .eq("id", userId);
     } else {
-      // Create new user
       isNewUser = true;
       const username =
         athlete.username ||
@@ -217,22 +374,20 @@ export async function GET(request: NextRequest) {
       userId = newUser.id;
     }
 
-    // Create a simple session by setting cookie
     const cookieStore = cookies();
     cookieStore.set("user_id", userId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 30,
       path: "/",
     });
 
-    // Auto-sync 50 recent activities in background (don't await)
+    // AUTO-SYNC 30 ACTIVITIES IN BACKGROUND (don't await)
     autoSyncActivities(userId, tokens.access_token).catch((err) => {
       console.error("Background sync error:", err);
     });
 
-    // Redirect to home page with success
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/?auth=success${isNewUser ? "&new_user=true" : ""}`
     );

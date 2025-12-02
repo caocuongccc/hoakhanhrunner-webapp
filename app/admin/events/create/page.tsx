@@ -1,4 +1,4 @@
-// app/admin/events/create/page.tsx - With Auto Team Generation
+// app/admin/events/create/page.tsx - FIXED FOREIGN KEY ISSUE
 "use client";
 
 import { useState } from "react";
@@ -7,9 +7,11 @@ import { ArrowLeft, Upload, Save, X } from "lucide-react";
 import { createSupabaseClient } from "@/lib/supabase";
 import Link from "next/link";
 import RulesSelector from "@/components/RulesSelector";
+import { useAdminAuth } from "@/components/AdminAuthProvider";
 
 export default function CreateEventPage() {
   const router = useRouter();
+  const { admin, loading: authLoading } = useAdminAuth();
   const supabase = createSupabaseClient();
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -26,8 +28,14 @@ export default function CreateEventPage() {
     end_time: "23:59",
     password: "",
     max_team_members: "",
-    num_teams: "", // Số lượng team cần tạo
+    num_teams: "",
   });
+
+  // Redirect if not admin
+  if (!authLoading && !admin) {
+    router.push("/admin-login");
+    return null;
+  }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -67,6 +75,13 @@ export default function CreateEventPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!admin) {
+      alert("Bạn cần đăng nhập với tư cách admin!");
+      router.push("/admin-login");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -78,6 +93,21 @@ export default function CreateEventPage() {
         alert("Thời gian kết thúc phải sau thời gian bắt đầu!");
         setLoading(false);
         return;
+      }
+
+      // Auto-determine status based on dates
+      const now = new Date();
+      const startDate = new Date(startDateTime);
+      const endDate = new Date(endDateTime);
+
+      let eventStatus: "pending" | "active" | "completed" | "cancelled" =
+        "pending";
+      if (now >= startDate && now <= endDate) {
+        eventStatus = "active";
+      } else if (now > endDate) {
+        eventStatus = "completed";
+      } else {
+        eventStatus = "pending";
       }
 
       // Validate team event requirements
@@ -108,39 +138,36 @@ export default function CreateEventPage() {
         imageUrl = await uploadImage();
       }
 
-      // Get current user from session
-      const sessionResponse = await fetch("/api/auth/session");
-      const sessionData = await sessionResponse.json();
+      // FIXED: Set created_by to null and track admin separately
+      const eventData: any = {
+        name: formData.name,
+        description: formData.description,
+        event_type: formData.event_type,
+        start_date: startDateTime,
+        end_date: endDateTime,
+        password: formData.password || null,
+        max_team_members: formData.max_team_members
+          ? parseInt(formData.max_team_members)
+          : null,
+        max_teams: formData.num_teams ? parseInt(formData.num_teams) : null,
+        image_url: imageUrl,
+        status: eventStatus, // Will use ENUM type
+        created_by: null, // Set to null to avoid foreign key error
+        created_by_admin_email: admin?.email || null, // Track which admin created
+      };
 
-      if (!sessionData.user) {
-        alert("Bạn cần đăng nhập!");
-        setLoading(false);
-        return;
-      }
+      console.log("Creating event with data:", eventData);
 
-      // Create event
       const { data: event, error: eventError } = await supabase
         .from("events")
-        .insert([
-          {
-            name: formData.name,
-            description: formData.description,
-            event_type: formData.event_type,
-            start_date: startDateTime,
-            end_date: endDateTime,
-            password: formData.password || null,
-            max_team_members: formData.max_team_members
-              ? parseInt(formData.max_team_members)
-              : null,
-            max_teams: formData.num_teams ? parseInt(formData.num_teams) : null,
-            image_url: imageUrl,
-            created_by: sessionData.user.id,
-          },
-        ])
+        .insert([eventData])
         .select()
         .single();
 
-      if (eventError) throw eventError;
+      if (eventError) {
+        console.error("Event creation error:", eventError);
+        throw new Error(eventError.message);
+      }
 
       // Add selected rules for team events
       if (formData.event_type === "team" && selectedRules.length > 0) {
@@ -179,20 +206,30 @@ export default function CreateEventPage() {
           console.error("Error creating teams:", teamsError);
           alert("Tạo sự kiện thành công nhưng có lỗi khi tạo các đội!");
         } else {
-          alert(`Tạo sự kiện thành công với ${numTeams} đội!`);
+          alert(
+            `✅ Tạo sự kiện thành công với ${numTeams} đội!\n📊 Trạng thái: ${eventStatus}`
+          );
         }
       } else {
-        alert("Tạo sự kiện thành công!");
+        alert(`✅ Tạo sự kiện thành công!\n📊 Trạng thái: ${eventStatus}`);
       }
 
       router.push("/admin/events");
     } catch (error: any) {
       console.error("Error creating event:", error);
-      alert(`Lỗi: ${error.message}`);
+      alert(`❌ Lỗi: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -210,6 +247,14 @@ export default function CreateEventPage() {
             Điền thông tin sự kiện và cấu hình
           </p>
         </div>
+      </div>
+
+      {/* Admin Info Banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-800">
+          <strong>👤 Đang tạo với tư cách:</strong> {admin?.email || "Admin"} (
+          {admin?.role || "admin"})
+        </p>
       </div>
 
       {/* Form */}
@@ -273,7 +318,7 @@ export default function CreateEventPage() {
                   }
                   className="w-4 h-4 text-blue-600"
                 />
-                <span>Cá nhân (không cần luật, chỉ lấy tracklog)</span>
+                <span>Cá nhân</span>
               </label>
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
@@ -288,7 +333,7 @@ export default function CreateEventPage() {
                   }
                   className="w-4 h-4 text-blue-600"
                 />
-                <span>Theo đội (bắt buộc chọn luật)</span>
+                <span>Theo đội</span>
               </label>
             </div>
           </div>
@@ -302,7 +347,7 @@ export default function CreateEventPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Số đội tham gia <span className="text-red-500">*</span>
+                    Số đội <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -313,15 +358,12 @@ export default function CreateEventPage() {
                       setFormData({ ...formData, num_teams: e.target.value })
                     }
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="VD: 10 đội"
+                    placeholder="VD: 10"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Hệ thống sẽ tự động tạo các team: Team 1, Team 2, ...
-                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Số người tối đa/đội <span className="text-red-500">*</span>
+                    Số người/đội <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -335,11 +377,8 @@ export default function CreateEventPage() {
                       })
                     }
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="VD: 5 người"
+                    placeholder="VD: 5"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Giới hạn số thành viên trong mỗi đội
-                  </p>
                 </div>
               </div>
             </div>
@@ -411,15 +450,18 @@ export default function CreateEventPage() {
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm text-blue-800">
-              <strong>Lưu ý:</strong> Chỉ các hoạt động chạy bộ diễn ra trong
-              khoảng thời gian này mới được tính vào sự kiện
+              <strong>ℹ️ Trạng thái tự động:</strong> Hệ thống sẽ tự động xác
+              định trạng thái sự kiện dựa trên ngày giờ:
+              <br />• <strong>Pending:</strong> Chưa đến ngày bắt đầu
+              <br />• <strong>Active:</strong> Đang trong thời gian diễn ra
+              <br />• <strong>Completed:</strong> Đã kết thúc
             </p>
           </div>
 
           {/* Password */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mật khẩu tham gia (tùy chọn)
+              Mật khẩu (tùy chọn)
             </label>
             <input
               type="text"
@@ -428,14 +470,14 @@ export default function CreateEventPage() {
                 setFormData({ ...formData, password: e.target.value })
               }
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Để trống nếu không cần mật khẩu"
+              placeholder="Để trống nếu không cần"
             />
           </div>
 
           {/* Image Upload */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Hình ảnh sự kiện
+              Hình ảnh
             </label>
 
             {imagePreview ? (
@@ -461,11 +503,7 @@ export default function CreateEventPage() {
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <Upload className="w-10 h-10 mb-3 text-gray-400" />
                   <p className="mb-2 text-sm text-gray-500">
-                    <span className="font-semibold">Click để upload</span> hoặc
-                    kéo thả
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG, GIF (MAX. 5MB)
+                    <span className="font-semibold">Click để upload</span>
                   </p>
                 </div>
                 <input
@@ -479,15 +517,12 @@ export default function CreateEventPage() {
           </div>
         </div>
 
-        {/* Rules Selection - Only for team events */}
+        {/* Rules Selection */}
         {formData.event_type === "team" && (
           <div className="border-t pt-6">
             <h2 className="text-xl font-bold text-gray-900 mb-2">
               Luật chơi <span className="text-red-500">*</span>
             </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Sự kiện theo đội bắt buộc phải chọn ít nhất 1 luật chơi
-            </p>
             <RulesSelector
               selectedRules={selectedRules}
               onChange={setSelectedRules}

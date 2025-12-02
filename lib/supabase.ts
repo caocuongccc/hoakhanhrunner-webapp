@@ -29,6 +29,8 @@ export type User = {
 };
 
 export type EventType = "team" | "individual";
+// UPDATED: Status is now ENUM type
+export type EventStatus = "pending" | "active" | "completed" | "cancelled";
 
 export type Event = {
   id: string;
@@ -40,7 +42,10 @@ export type Event = {
   end_date: string;
   password?: string;
   max_team_members?: number;
-  created_by: string;
+  max_teams?: number;
+  created_by?: string | null; // Now nullable
+  created_by_admin_email?: string | null; // Track admin creator
+  status: EventStatus; // ENUM type
   created_at: string;
   updated_at: string;
 };

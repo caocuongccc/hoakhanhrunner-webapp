@@ -1,11 +1,8 @@
-// app/api/strava/sync-activities/route.ts
+// app/api/strava/sync-activities/route.ts - FIXED VERSION
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
 
-/**
- * Helper: Refresh Strava token
- */
 async function refreshStravaToken(refreshToken: string) {
   const response = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
@@ -22,9 +19,6 @@ async function refreshStravaToken(refreshToken: string) {
   return response.json();
 }
 
-/**
- * Helper: Get valid access token
- */
 async function getValidAccessToken(userId: string) {
   const { data: user } = await supabase
     .from("users")
@@ -59,43 +53,6 @@ async function getValidAccessToken(userId: string) {
   return user.strava_access_token;
 }
 
-/**
- * Helper: Fetch activities from Strava
- */
-async function fetchStravaActivities(
-  accessToken: string,
-  after?: number,
-  before?: number,
-  page: number = 1,
-  perPage: number = 30
-) {
-  const params = new URLSearchParams({
-    page: page.toString(),
-    per_page: perPage.toString(),
-  });
-
-  if (after) params.append("after", after.toString());
-  if (before) params.append("before", before.toString());
-
-  const response = await fetch(
-    `https://www.strava.com/api/v3/athlete/activities?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch activities from Strava");
-  }
-
-  return response.json();
-}
-
-/**
- * Helper: Save best efforts
- */
 async function saveBestEfforts(
   userId: string,
   activityId: number,
@@ -124,9 +81,85 @@ async function saveBestEfforts(
   }
 }
 
-/**
- * POST - Manually sync activities from Strava
- */
+// Helper: Sync activity to events
+async function syncToEventActivities(userId: string, activity: any) {
+  try {
+    const activityDateTime = new Date(activity.start_date_local);
+    const activityDate = activityDateTime.toISOString().split("T")[0];
+
+    const { data: participations } = await supabase
+      .from("event_participants")
+      .select("event_id, events!inner(*)")
+      .eq("user_id", userId);
+
+    if (!participations || participations.length === 0) {
+      console.log("No events found for user");
+      return;
+    }
+
+    for (const participation of participations) {
+      const event = participation.events;
+      const eventStart = new Date(event.start_date);
+      const eventEnd = new Date(event.end_date);
+
+      if (activityDateTime >= eventStart && activityDateTime <= eventEnd) {
+        const eventId = participation.event_id;
+        const distanceKm = activity.distance / 1000;
+        const paceMinPerKm =
+          activity.moving_time > 0
+            ? activity.moving_time / 60 / distanceKm
+            : null;
+
+        // IMPORTANT: Save polyline from activity.map.summary_polyline
+        const routeData = activity.map?.summary_polyline
+          ? { polyline: activity.map.summary_polyline }
+          : null;
+
+        const { data: existingActivity } = await supabase
+          .from("activities")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("event_id", eventId)
+          .eq("activity_date", activityDate)
+          .single();
+
+        if (existingActivity) {
+          await supabase
+            .from("activities")
+            .update({
+              distance_km: distanceKm,
+              duration_seconds: activity.moving_time,
+              pace_min_per_km: paceMinPerKm,
+              route_data: routeData, // Save polyline
+              description: activity.name,
+              points_earned: distanceKm,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existingActivity.id);
+        } else {
+          await supabase.from("activities").insert([
+            {
+              user_id: userId,
+              event_id: eventId,
+              activity_date: activityDate,
+              distance_km: distanceKm,
+              duration_seconds: activity.moving_time,
+              pace_min_per_km: paceMinPerKm,
+              route_data: routeData, // Save polyline
+              description: activity.name,
+              points_earned: distanceKm,
+            },
+          ]);
+        }
+
+        console.log(`✅ Synced to event ${eventId} with polyline`);
+      }
+    }
+  } catch (error) {
+    console.error("Error syncing to events:", error);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = cookies();
@@ -137,24 +170,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { after, before, page = 1, perPage = 30 } = body;
+    const { page = 1, perPage = 30 } = body;
 
-    // Get valid access token
+    console.log(`📥 Syncing activities for user ${userId}, page ${page}`);
+
     const accessToken = await getValidAccessToken(userId);
-
-    // Fetch activities from Strava
-    const activities = await fetchStravaActivities(
-      accessToken,
-      after,
-      before,
-      page,
-      perPage
-    );
-
-    // Filter only running activities
-    const runningActivities = activities.filter(
-      (a: any) => a.sport_type === "Run" || a.type === "Run"
-    );
 
     // Get user's athlete ID
     const { data: user } = await supabase
@@ -167,10 +187,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Save activities to database
+    // Fetch activities from Strava
+    const response = await fetch(
+      `https://www.strava.com/api/v3/athlete/activities?per_page=${perPage}&page=${page}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch activities from Strava");
+    }
+
+    const activities = await response.json();
+    const runningActivities = activities.filter(
+      (a: any) => a.sport_type === "Run" || a.type === "Run"
+    );
+
+    console.log(
+      `📊 Found ${runningActivities.length}/${activities.length} running activities`
+    );
+
     const savedActivities = [];
+
     for (const activity of runningActivities) {
-      // Fetch detailed activity to get best efforts
+      // Fetch DETAILED activity to get best_efforts and polyline
       const detailResponse = await fetch(
         `https://www.strava.com/api/v3/activities/${activity.id}`,
         {
@@ -178,9 +219,14 @@ export async function POST(request: NextRequest) {
         }
       );
 
+      if (!detailResponse.ok) {
+        console.error(`Failed to fetch details for activity ${activity.id}`);
+        continue;
+      }
+
       const detailedActivity = await detailResponse.json();
 
-      // Save to strava_activities
+      // Save to strava_activities with polyline
       const { data, error } = await supabase
         .from("strava_activities")
         .upsert(
@@ -198,13 +244,7 @@ export async function POST(request: NextRequest) {
               start_date: detailedActivity.start_date,
               start_date_local: detailedActivity.start_date_local,
               timezone: detailedActivity.timezone,
-              achievement_count: detailedActivity.achievement_count,
-              kudos_count: detailedActivity.kudos_count,
-              comment_count: detailedActivity.comment_count,
-              athlete_count: detailedActivity.athlete_count,
-              photo_count: detailedActivity.photo_count,
-              map_polyline: detailedActivity.map?.polyline,
-              map_summary_polyline: detailedActivity.map?.summary_polyline,
+              map_summary_polyline: detailedActivity.map?.summary_polyline, // Save polyline
               average_speed: detailedActivity.average_speed,
               max_speed: detailedActivity.max_speed,
               average_heartrate: detailedActivity.average_heartrate,
@@ -222,7 +262,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (!error && data) {
-        // Save best efforts if available
+        // Save best efforts
         if (
           detailedActivity.best_efforts &&
           detailedActivity.best_efforts.length > 0
@@ -234,9 +274,14 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        // Sync to event activities (with polyline)
+        await syncToEventActivities(userId, detailedActivity);
+
         savedActivities.push(data);
       }
     }
+
+    console.log(`✅ Successfully synced ${savedActivities.length} activities`);
 
     return NextResponse.json({
       success: true,
@@ -244,11 +289,10 @@ export async function POST(request: NextRequest) {
       data: {
         total: activities.length,
         running: savedActivities.length,
-        activities: savedActivities,
       },
     });
   } catch (error: any) {
-    console.error("Sync activities error:", error);
+    console.error("❌ Sync error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to sync activities" },
       { status: 500 }

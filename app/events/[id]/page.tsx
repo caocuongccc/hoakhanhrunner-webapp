@@ -275,7 +275,15 @@ export default function EventDetailPage() {
           </div>
         </div>
       )}
-
+      {/* Event Statistics */}
+      {event && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
+            Thống kê sự kiện
+          </h2>
+          <EventStatistics eventId={eventId} eventType={event.event_type} />
+        </div>
+      )}
       {/* Dashboard */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Bảng xếp hạng</h2>
@@ -442,6 +450,155 @@ function JoinEventModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+function EventStatistics({
+  eventId,
+  eventType,
+}: {
+  eventId: string;
+  eventType: string;
+}) {
+  const [stats, setStats] = useState({
+    totalParticipants: 0,
+    totalActivities: 0,
+    totalDistance: 0,
+    totalPoints: 0,
+    averagePace: 0,
+    topRunner: null as { username: string; distance: number } | null,
+  });
+  const [loading, setLoading] = useState(true);
+  const supabase = createSupabaseClient();
+
+  useEffect(() => {
+    loadStats();
+  }, [eventId]);
+
+  const loadStats = async () => {
+    try {
+      // Get all participants
+      const { data: participants, error: participantsError } = await supabase
+        .from("event_participants")
+        .select("user_id, total_km, total_points, users(username)")
+        .eq("event_id", eventId);
+
+      if (participantsError) throw participantsError;
+
+      // Get all activities
+      const { data: activities, error: activitiesError } = await supabase
+        .from("activities")
+        .select("distance_km, points_earned, pace_min_per_km")
+        .eq("event_id", eventId);
+
+      if (activitiesError) throw activitiesError;
+
+      // Calculate stats
+      const totalDistance =
+        participants?.reduce((sum, p) => sum + (p.total_km || 0), 0) || 0;
+      const totalPoints =
+        participants?.reduce((sum, p) => sum + (p.total_points || 0), 0) || 0;
+
+      const validPaces =
+        activities
+          ?.filter((a) => a.pace_min_per_km)
+          .map((a) => a.pace_min_per_km!) || [];
+      const averagePace =
+        validPaces.length > 0
+          ? validPaces.reduce((sum, p) => sum + p, 0) / validPaces.length
+          : 0;
+
+      // Find top runner
+      const topRunner =
+        participants && participants.length > 0
+          ? participants.reduce((top, p) =>
+              p.total_km > (top?.total_km || 0) ? p : top
+            )
+          : null;
+
+      setStats({
+        totalParticipants: participants?.length || 0,
+        totalActivities: activities?.length || 0,
+        totalDistance,
+        totalPoints,
+        averagePace,
+        topRunner: topRunner
+          ? {
+              username: topRunner.users.username,
+              distance: topRunner.total_km,
+            }
+          : null,
+      });
+    } catch (error) {
+      console.error("Error loading stats:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <div className="text-center">
+        <div className="text-4xl font-bold text-blue-600 mb-2">
+          {stats.totalParticipants}
+        </div>
+        <div className="text-sm text-gray-600">Người tham gia</div>
+      </div>
+
+      <div className="text-center">
+        <div className="text-4xl font-bold text-green-600 mb-2">
+          {stats.totalDistance.toFixed(1)}
+        </div>
+        <div className="text-sm text-gray-600">Tổng km</div>
+      </div>
+
+      <div className="text-center">
+        <div className="text-4xl font-bold text-purple-600 mb-2">
+          {stats.totalPoints.toFixed(0)}
+        </div>
+        <div className="text-sm text-gray-600">Tổng điểm</div>
+      </div>
+
+      <div className="text-center">
+        <div className="text-4xl font-bold text-orange-600 mb-2">
+          {stats.totalActivities}
+        </div>
+        <div className="text-sm text-gray-600">Hoạt động</div>
+      </div>
+
+      {stats.averagePace > 0 && (
+        <div className="col-span-2 md:col-span-4 mt-4 p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm text-gray-600">Pace trung bình: </span>
+              <span className="text-lg font-bold text-gray-900">
+                {Math.floor(stats.averagePace)}:
+                {Math.round((stats.averagePace % 1) * 60)
+                  .toString()
+                  .padStart(2, "0")}{" "}
+                /km
+              </span>
+            </div>
+            {stats.topRunner && (
+              <div>
+                <span className="text-sm text-gray-600">Top runner: </span>
+                <span className="text-lg font-bold text-gray-900">
+                  {stats.topRunner.username} (
+                  {stats.topRunner.distance.toFixed(1)} km)
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

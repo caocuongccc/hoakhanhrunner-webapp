@@ -1,3 +1,4 @@
+// app/feeds/page.tsx - FIXED VERSION
 "use client";
 
 import { useEffect, useState } from "react";
@@ -11,38 +12,38 @@ import {
   MapPin,
   Clock,
   TrendingUp,
-  Award,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { createSupabaseClient } from "@/lib/supabase";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 
 type ActivityFeed = {
   id: string;
   user_id: string;
-  activity_type: string;
-  distance: number;
-  duration: number;
-  elevation_gain: number;
-  average_speed: number;
-  max_speed: number;
-  start_date: string;
-  name: string;
+  event_id: string;
+  activity_date: string;
+  distance_km: number;
+  duration_seconds: number;
+  pace_min_per_km?: number;
   description?: string;
-  polyline?: string;
+  points_earned: number;
+  created_at: string;
   users: {
     id: string;
     full_name: string;
-    profile_picture?: string;
+    avatar_url?: string;
     username: string;
   };
-  likes_count?: number;
-  comments_count?: number;
+  events: {
+    id: string;
+    name: string;
+  };
 };
 
 export default function FeedsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const supabase = createSupabaseClient();
   const [activities, setActivities] = useState<ActivityFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "following" | "mine">("all");
@@ -67,15 +68,19 @@ export default function FeedsPage() {
         .select(
           `
           *,
-          users (
+          users!activities_user_id_fkey (
             id,
             full_name,
-            profile_picture,
+            avatar_url,
             username
+          ),
+          events!activities_event_id_fkey (
+            id,
+            name
           )
         `
         )
-        .order("start_date", { ascending: false })
+        .order("activity_date", { ascending: false })
         .limit(50);
 
       // Filter by mine
@@ -85,7 +90,10 @@ export default function FeedsPage() {
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error loading activities:", error);
+        throw error;
+      }
 
       setActivities(data || []);
     } catch (error) {
@@ -104,10 +112,10 @@ export default function FeedsPage() {
     return `${minutes}m`;
   };
 
-  const formatPace = (metersPerSecond: number) => {
-    const minutesPerKm = 1000 / (metersPerSecond * 60);
-    const minutes = Math.floor(minutesPerKm);
-    const seconds = Math.floor((minutesPerKm - minutes) * 60);
+  const formatPace = (paceMinPerKm?: number) => {
+    if (!paceMinPerKm) return "N/A";
+    const minutes = Math.floor(paceMinPerKm);
+    const seconds = Math.floor((paceMinPerKm - minutes) * 60);
     return `${minutes}:${seconds.toString().padStart(2, "0")} /km`;
   };
 
@@ -186,41 +194,52 @@ export default function FeedsPage() {
               >
                 {/* User Info */}
                 <div className="p-4 flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                    {activity.users.profile_picture ? (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                    {activity.users.avatar_url ? (
                       <img
-                        src={activity.users.profile_picture}
-                        alt={activity.users.full_name}
+                        src={activity.users.avatar_url}
+                        alt={
+                          activity.users.full_name || activity.users.username
+                        }
                         className="w-10 h-10 rounded-full object-cover"
                       />
                     ) : (
-                      activity.users.full_name?.[0] || "U"
+                      activity.users.full_name?.[0] ||
+                      activity.users.username?.[0] ||
+                      "U"
                     )}
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 truncate">
                       {activity.users.full_name || activity.users.username}
                     </h3>
-                    <p className="text-sm text-gray-500">
-                      {format(
-                        new Date(activity.start_date),
-                        "dd MMM yyyy, HH:mm",
-                        { locale: vi }
+                    <div className="flex items-center space-x-2 text-sm text-gray-500">
+                      <span>
+                        {format(
+                          new Date(activity.activity_date),
+                          "dd MMM yyyy",
+                          { locale: vi }
+                        )}
+                      </span>
+                      {activity.events && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate">
+                            {activity.events.name}
+                          </span>
+                        </>
                       )}
-                    </p>
+                    </div>
                   </div>
-                  <Activity className="h-5 w-5 text-orange-500" />
+                  <Activity className="h-5 w-5 text-orange-500 flex-shrink-0" />
                 </div>
 
                 {/* Activity Details */}
                 <div className="px-4 pb-4">
-                  <h4 className="font-semibold text-lg text-gray-900 mb-2">
-                    {activity.name}
-                  </h4>
                   {activity.description && (
-                    <p className="text-gray-600 text-sm mb-3">
+                    <h4 className="font-semibold text-lg text-gray-900 mb-3">
                       {activity.description}
-                    </p>
+                    </h4>
                   )}
 
                   {/* Stats Grid */}
@@ -230,7 +249,7 @@ export default function FeedsPage() {
                         <MapPin className="h-4 w-4 text-gray-500 mr-1" />
                       </div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {(activity.distance / 1000).toFixed(2)}
+                        {activity.distance_km.toFixed(2)}
                       </div>
                       <div className="text-xs text-gray-500">km</div>
                     </div>
@@ -239,7 +258,7 @@ export default function FeedsPage() {
                         <Clock className="h-4 w-4 text-gray-500 mr-1" />
                       </div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {formatDuration(activity.duration)}
+                        {formatDuration(activity.duration_seconds)}
                       </div>
                       <div className="text-xs text-gray-500">thời gian</div>
                     </div>
@@ -248,34 +267,29 @@ export default function FeedsPage() {
                         <TrendingUp className="h-4 w-4 text-gray-500 mr-1" />
                       </div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {formatPace(activity.average_speed)}
+                        {formatPace(activity.pace_min_per_km)}
                       </div>
                       <div className="text-xs text-gray-500">pace</div>
                     </div>
                   </div>
 
-                  {/* Additional Stats */}
-                  {activity.elevation_gain > 0 && (
-                    <div className="mt-3 flex items-center text-sm text-gray-600">
-                      <Award className="h-4 w-4 mr-1" />
-                      <span>
-                        Độ cao: {Math.round(activity.elevation_gain)}m
-                      </span>
+                  {/* Points */}
+                  <div className="mt-3 flex items-center text-sm">
+                    <div className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-semibold">
+                      {activity.points_earned.toFixed(2)} điểm
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Actions */}
                 <div className="border-t px-4 py-3 flex items-center justify-around text-gray-600">
                   <button className="flex items-center space-x-2 hover:text-red-500 transition-colors">
                     <Heart className="h-5 w-5" />
-                    <span className="text-sm">{activity.likes_count || 0}</span>
+                    <span className="text-sm">Thích</span>
                   </button>
                   <button className="flex items-center space-x-2 hover:text-blue-500 transition-colors">
                     <MessageCircle className="h-5 w-5" />
-                    <span className="text-sm">
-                      {activity.comments_count || 0}
-                    </span>
+                    <span className="text-sm">Bình luận</span>
                   </button>
                   <button className="flex items-center space-x-2 hover:text-green-500 transition-colors">
                     <Share2 className="h-5 w-5" />

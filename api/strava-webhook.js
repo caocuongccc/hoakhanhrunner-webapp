@@ -1,4 +1,4 @@
-// api/strava-webhook.js - Updated with Best Efforts
+// api/strava-webhook.js - FIXED VERSION WITH STATS UPDATE
 const { createClient } = require("@supabase/supabase-js");
 
 const supabase = createClient(
@@ -12,7 +12,6 @@ const supabase = createClient(
   }
 );
 
-// Helper: Refresh Strava token
 async function refreshStravaToken(refreshToken) {
   const response = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
@@ -29,7 +28,6 @@ async function refreshStravaToken(refreshToken) {
   return response.json();
 }
 
-// Helper: Get valid access token
 async function getValidAccessToken(userId) {
   const { data: user } = await supabase
     .from("users")
@@ -64,7 +62,6 @@ async function getValidAccessToken(userId) {
   return user.strava_access_token;
 }
 
-// Helper: Fetch activity with best efforts from Strava
 async function fetchStravaActivity(activityId, accessToken) {
   const response = await fetch(
     `https://www.strava.com/api/v3/activities/${activityId}`,
@@ -77,34 +74,53 @@ async function fetchStravaActivity(activityId, accessToken) {
   return response.json();
 }
 
-// Helper: Save best efforts to database
+/**
+ * Save best efforts - ONLY KEEP FASTEST TIME
+ */
 async function saveBestEfforts(userId, activityId, bestEfforts) {
   if (!bestEfforts || bestEfforts.length === 0) return;
 
-  const records = bestEfforts.map((effort) => ({
-    user_id: userId,
-    strava_activity_id: activityId,
-    effort_name: effort.name,
-    elapsed_time: effort.elapsed_time,
-    moving_time: effort.moving_time,
-    distance: effort.distance,
-    start_date: effort.start_date,
-    start_date_local: effort.start_date_local,
-    raw_data: effort,
-  }));
+  for (const effort of bestEfforts) {
+    // Check existing PR
+    const { data: existingPR } = await supabase
+      .from("best_efforts")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("effort_name", effort.name)
+      .order("elapsed_time", { ascending: true })
+      .limit(1)
+      .single();
 
-  const { error } = await supabase.from("best_efforts").upsert(records, {
-    onConflict: "user_id,strava_activity_id,effort_name",
-  });
+    // If new time is faster, replace
+    if (!existingPR || effort.elapsed_time < existingPR.elapsed_time) {
+      if (existingPR) {
+        await supabase
+          .from("best_efforts")
+          .delete()
+          .eq("user_id", userId)
+          .eq("effort_name", effort.name);
+      }
 
-  if (error) {
-    console.error("Error saving best efforts:", error);
-  } else {
-    console.log(`Saved ${records.length} best efforts`);
+      await supabase.from("best_efforts").insert({
+        user_id: userId,
+        strava_activity_id: activityId,
+        effort_name: effort.name,
+        elapsed_time: effort.elapsed_time,
+        moving_time: effort.moving_time,
+        distance: effort.distance,
+        start_date: effort.start_date,
+        start_date_local: effort.start_date_local,
+        raw_data: effort,
+      });
+
+      console.log(`✅ New PR for ${effort.name}: ${effort.elapsed_time}s`);
+    }
   }
 }
 
-// Update participant stats
+/**
+ * Update participant stats - FIXED
+ */
 async function updateParticipantStats(eventId, userId) {
   try {
     const { data: activities } = await supabase
@@ -124,7 +140,7 @@ async function updateParticipantStats(eventId, userId) {
       0
     );
 
-    await supabase
+    const { error } = await supabase
       .from("event_participants")
       .update({
         total_km: totalKm,
@@ -133,6 +149,12 @@ async function updateParticipantStats(eventId, userId) {
       .eq("event_id", eventId)
       .eq("user_id", userId);
 
+    if (error) {
+      console.error("Error updating participant stats:", error);
+      return;
+    }
+
+    // Also update team stats if user is in a team
     const { data: participant } = await supabase
       .from("event_participants")
       .select("team_id")
@@ -152,7 +174,6 @@ async function updateParticipantStats(eventId, userId) {
   }
 }
 
-// Update team stats
 async function updateTeamStats(teamId) {
   try {
     const { data: members } = await supabase
@@ -178,13 +199,11 @@ async function updateTeamStats(teamId) {
   }
 }
 
-// Helper: Sync to event activities with time check
 async function syncToEventActivities(userId, activity) {
   try {
     const activityDateTime = new Date(activity.start_date_local);
     const activityDate = activityDateTime.toISOString().split("T")[0];
 
-    // Get all events user is participating in
     const { data: participations } = await supabase
       .from("event_participants")
       .select("event_id, events!inner(*)")
@@ -200,13 +219,11 @@ async function syncToEventActivities(userId, activity) {
       await saveBestEfforts(userId, activity.id, activity.best_efforts);
     }
 
-    // For each event, check if activity falls within event date-time range
     for (const participation of participations) {
       const event = participation.events;
       const eventStart = new Date(event.start_date);
       const eventEnd = new Date(event.end_date);
 
-      // Check if activity is within event time range
       if (activityDateTime >= eventStart && activityDateTime <= eventEnd) {
         const eventId = participation.event_id;
         const distanceKm = activity.distance / 1000;
@@ -236,7 +253,6 @@ async function syncToEventActivities(userId, activity) {
               route_data: routeData,
               description: activity.name,
               points_earned: distanceKm,
-              best_efforts: activity.best_efforts,
               updated_at: new Date().toISOString(),
             })
             .eq("id", existingActivity.id);
@@ -252,17 +268,13 @@ async function syncToEventActivities(userId, activity) {
               route_data: routeData,
               description: activity.name,
               points_earned: distanceKm,
-              best_efforts: activity.best_efforts,
             },
           ]);
         }
 
+        // IMPORTANT: Update participant stats
         await updateParticipantStats(eventId, userId);
         console.log(`✅ Synced to event ${eventId} (${event.name})`);
-      } else {
-        console.log(
-          `⏭️ Activity outside event ${event.name} time range: ${activityDateTime.toISOString()} not in [${eventStart.toISOString()}, ${eventEnd.toISOString()}]`
-        );
       }
     }
   } catch (error) {
@@ -270,11 +282,9 @@ async function syncToEventActivities(userId, activity) {
   }
 }
 
-// Main webhook handler
 module.exports = async function handler(req, res) {
   console.log("🔥 Webhook:", req.method);
 
-  // GET - Verification
   if (req.method === "GET") {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
@@ -291,7 +301,6 @@ module.exports = async function handler(req, res) {
     return res.status(403).send("Forbidden");
   }
 
-  // POST - Handle event
   if (req.method === "POST") {
     const event = req.body;
     console.log("🎯 Event:", event.object_type, event.aspect_type);
@@ -305,7 +314,6 @@ module.exports = async function handler(req, res) {
       event_time,
     } = event;
 
-    // Log event
     const { data: loggedEvent } = await supabase
       .from("strava_webhook_events")
       .insert([
