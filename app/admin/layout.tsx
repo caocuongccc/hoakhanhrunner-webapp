@@ -25,6 +25,7 @@ export default function AdminLayout({
 }) {
   return (
     <AdminAuthProvider>
+      {/* NO NAVIGATION WRAPPER - Admin doesn't use the main app Navigation */}
       <AdminLayoutContent>{children}</AdminLayoutContent>
     </AdminAuthProvider>
   );
@@ -81,7 +82,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-md flex flex-col fixed h-full">
+      {/* <aside className="w-64 bg-white shadow-lg flex flex-col fixed h-full z-50"> */}
+      <aside className="w-64 bg-white shadow-lg flex flex-col fixed top-0 left-0 h-screen z-[9999]">
         <div className="p-6 border-b">
           <h2 className="text-xl font-bold text-gray-900">Admin Panel</h2>
           <p className="text-sm text-gray-600 mt-1">{admin.email}</p>
@@ -115,11 +117,12 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Logout Button - Fixed positioning */}
+        {/* Logout Button - Always visible at bottom */}
         <div className="p-4 border-t bg-white">
           <button
             onClick={handleLogout}
-            className="flex items-center justify-center space-x-2 px-4 py-3 rounded-lg text-white bg-red-600 hover:bg-red-700 w-full transition-colors shadow-sm"
+            // className="flex items-center justify-center space-x-2 w-full px-4 py-3 rounded-lg text-white bg-red-600 hover:bg-red-700 transition-colors shadow-md"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg text-white bg-red-600 hover:bg-red-700 transition-colors shadow-md z-[10000] relative"
           >
             <LogOut className="h-5 w-5" />
             <span className="font-semibold">Đăng xuất</span>

@@ -23,8 +23,10 @@ export default function AdminLoginPage() {
     try {
       const response = await fetch("/api/admin/session");
       const data = await response.json();
-      console.log("Session check data:", data);
+      console.log("Check session:", data);
+
       if (data.admin) {
+        console.log("Already logged in, redirecting to /admin");
         router.push("/admin");
       }
     } catch (error) {
@@ -37,6 +39,8 @@ export default function AdminLoginPage() {
     setError("");
     setLoading(true);
 
+    console.log("Attempting login with:", formData.email);
+
     try {
       const response = await fetch("/api/admin/login", {
         method: "POST",
@@ -45,6 +49,7 @@ export default function AdminLoginPage() {
       });
 
       const data = await response.json();
+      console.log("Login response:", data);
 
       if (!response.ok) {
         setError(data.error || "Đăng nhập thất bại");
@@ -52,8 +57,9 @@ export default function AdminLoginPage() {
         return;
       }
 
+      console.log("Login successful, redirecting to /admin");
       // Redirect to admin dashboard
-      router.push("/admin");
+      window.location.href = "/admin";
     } catch (error: any) {
       console.error("Login error:", error);
       setError("Đã xảy ra lỗi khi đăng nhập");
@@ -168,6 +174,17 @@ export default function AdminLoginPage() {
                 đăng nhập qua Strava
               </a>
               .
+            </p>
+          </div>
+
+          {/* Test Account Info */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <p className="text-xs text-gray-600 font-mono">
+              <strong>Test Account:</strong>
+              <br />
+              Email: admin@runningclub.local
+              <br />
+              Password: Admin@123
             </p>
           </div>
         </div>

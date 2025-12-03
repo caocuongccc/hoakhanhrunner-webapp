@@ -1,4 +1,4 @@
-// app/activities/page.tsx - Load only best PRs per distance
+// app/activities/page.tsx - FIXED: Only show activities that meet event rules
 "use client";
 
 import { useEffect, useState } from "react";
@@ -30,6 +30,8 @@ type Activity = {
   events: {
     id: string;
     name: string;
+    start_date: string;
+    end_date: string;
   };
 };
 
@@ -108,30 +110,40 @@ export default function ActivitiesPage() {
   const loadMyActivities = async () => {
     if (!user) return;
 
+    // FIXED: Only load activities that earned points (passed rules)
     const { data, error } = await supabase
       .from("activities")
       .select(
         `
         *,
-        events(id, name)
+        events(id, name, start_date, end_date)
       `
       )
       .eq("user_id", user.id)
+      .gt("points_earned", 0) // Only activities that earned points
       .order("activity_date", { ascending: false })
       .limit(50);
 
     if (error) throw error;
-    setActivities(data || []);
+
+    // FIXED: Filter by event date range
+    const filteredActivities = (data || []).filter((activity) => {
+      const activityDate = new Date(activity.activity_date);
+      const eventStart = new Date(activity.events.start_date);
+      const eventEnd = new Date(activity.events.end_date);
+
+      return activityDate >= eventStart && activityDate <= eventEnd;
+    });
+
+    setActivities(filteredActivities);
   };
 
   const loadPersonalRecords = async () => {
     if (!user) return;
 
     try {
-      // Use the getUserPRs function from lib/strava-best-efforts.ts
       const prsMap = await getUserPRs(user.id);
-      
-      // Convert to array for display
+
       const prsArray: PersonalRecord[] = Object.entries(prsMap).map(
         ([effortName, data]) => ({
           effortName,
@@ -141,7 +153,6 @@ export default function ActivitiesPage() {
         })
       );
 
-      // Sort by common race distances order
       const distanceOrder = [
         "400m",
         "1/2 mile",
@@ -176,15 +187,18 @@ export default function ActivitiesPage() {
   const loadStats = async () => {
     if (!user) return;
 
+    // Count only activities that earned points
     const { count: activityCount } = await supabase
       .from("activities")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .gt("points_earned", 0);
 
     const { data: activitiesData } = await supabase
       .from("activities")
       .select("distance_km, points_earned")
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .gt("points_earned", 0);
 
     const totalDistance =
       activitiesData?.reduce((sum, a) => sum + (a.distance_km || 0), 0) || 0;
@@ -289,7 +303,7 @@ export default function ActivitiesPage() {
             Hoạt động của tôi
           </h1>
           <p className="text-gray-600 mt-1">
-            Quản lý sự kiện và hoạt động chạy bộ
+            Quản lý sự kiện và hoạt động chạy bộ đạt điều kiện
           </p>
         </div>
         <button
@@ -306,7 +320,7 @@ export default function ActivitiesPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard
           icon={<ActivityIcon className="h-6 w-6" />}
-          label="Hoạt động"
+          label="Hoạt động hợp lệ"
           value={stats.totalActivities}
           color="blue"
         />
@@ -350,7 +364,7 @@ export default function ActivitiesPage() {
               : "border-transparent text-gray-600 hover:text-gray-900"
           }`}
         >
-          Hoạt động của tôi
+          Hoạt động hợp lệ
         </button>
         <button
           onClick={() => setView("account")}
@@ -515,9 +529,12 @@ function MyActivitiesView({
     return (
       <div className="bg-white rounded-xl shadow-md p-12 text-center">
         <ActivityIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-        <p className="text-gray-500 text-lg mb-2">Chưa có hoạt động nào</p>
+        <p className="text-gray-500 text-lg mb-2">
+          Chưa có hoạt động hợp lệ nào
+        </p>
         <p className="text-gray-400 text-sm">
-          Hoạt động từ Strava sẽ tự động đồng bộ về đây
+          Chỉ những hoạt động đạt điều kiện event và trong thời gian event mới
+          được hiển thị
         </p>
       </div>
     );
@@ -714,7 +731,7 @@ function AccountView({
         </div>
       </div>
 
-      {/* Personal Records (Best PRs only) - Read Only */}
+      {/* Personal Records */}
       <div className="bg-white rounded-xl shadow-md p-6 max-w-2xl">
         <div className="flex items-center space-x-3 mb-6">
           <Award className="h-6 w-6 text-yellow-600" />

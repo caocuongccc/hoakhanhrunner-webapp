@@ -1,9 +1,12 @@
-// app/admin/certificates/page.tsx - FIXED VERSION
+// app/admin/certificates/page.tsx - WITH PREVIEW & ZIP DOWNLOAD
 "use client";
 
 import { useState, useEffect } from "react";
-import { Award, Download, Send, FileText, Users, Calendar } from "lucide-react";
+import { Award, Download, FileText, Users, Calendar, Eye } from "lucide-react";
 import { createSupabaseClient } from "@/lib/supabase";
+import { format } from "date-fns";
+import { vi } from "date-fns/locale";
+import CertificatePreview from "@/components/CertificatePreview";
 
 type Event = {
   id: string;
@@ -29,9 +32,13 @@ export default function AdminCertificatesPage() {
   const supabase = createSupabaseClient();
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
+  const [selectedEventData, setSelectedEventData] = useState<Event | null>(
+    null
+  );
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
 
   useEffect(() => {
     loadEvents();
@@ -40,18 +47,17 @@ export default function AdminCertificatesPage() {
   const loadEvents = async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const now = new Date();
 
       const { data, error } = await supabase
         .from("events")
         .select("*")
         .eq("event_type", "individual")
-        .lt("end_date", today)
+        .lt("end_date", now.toISOString())
         .order("end_date", { ascending: false });
 
       if (error) throw error;
 
-      // Get participant counts
       const eventsWithCounts = await Promise.all(
         (data || []).map(async (event) => {
           const { count } = await supabase
@@ -82,7 +88,8 @@ export default function AdminCertificatesPage() {
       const event = events.find((e) => e.id === eventId);
       if (!event) return;
 
-      // Calculate total days
+      setSelectedEventData(event);
+
       const startDate = new Date(event.start_date);
       const endDate = new Date(event.end_date);
       const totalDays =
@@ -90,7 +97,6 @@ export default function AdminCertificatesPage() {
           (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
         ) + 1;
 
-      // Get participants with their stats
       const { data: participantsData, error } = await supabase
         .from("event_participants")
         .select(
@@ -105,18 +111,19 @@ export default function AdminCertificatesPage() {
 
       if (error) throw error;
 
-      // Get activity stats for each participant
       const participantsWithStats = await Promise.all(
         (participantsData || []).map(async (p) => {
           const { data: activities } = await supabase
             .from("activities")
             .select("activity_date, pace_min_per_km")
             .eq("event_id", eventId)
-            .eq("user_id", p.user_id);
+            .eq("user_id", p.user_id)
+            .gt("points_earned", 0);
 
           const activeDays = new Set(
             activities?.map((a) => a.activity_date) || []
           ).size;
+
           const avgPace =
             activities && activities.length > 0
               ? activities.reduce(
@@ -150,8 +157,30 @@ export default function AdminCertificatesPage() {
     }
   };
 
-  const handleGenerateCertificates = async () => {
+  const handlePreview = (participant: Participant) => {
+    if (!selectedEventData) return;
+
+    setPreviewData({
+      athleteName: participant.full_name || participant.username,
+      eventName: selectedEventData.name,
+      activeDays: participant.active_days,
+      totalDays: participant.total_days,
+      totalDistance: participant.total_distance,
+      averagePace: participant.average_pace,
+      completionDate: format(
+        new Date(selectedEventData.end_date),
+        "MMMM dd, yyyy",
+        { locale: vi }
+      ),
+    });
+  };
+
+  const handleGenerateAll = async () => {
     if (!selectedEvent) return;
+
+    if (!confirm(`Tạo ${participants.length} chứng chỉ và tải về file ZIP?`)) {
+      return;
+    }
 
     setGenerating(true);
     try {
@@ -162,13 +191,22 @@ export default function AdminCertificatesPage() {
         }
       );
 
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`Đã tạo ${data.data.length} chứng chỉ thành công!`);
-      } else {
-        alert("Lỗi: " + data.error);
+      if (!response.ok) {
+        throw new Error("Failed to generate certificates");
       }
+
+      // Download ZIP file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `certificates-${selectedEvent}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      alert(`Đã tạo và tải xuống ${participants.length} chứng chỉ thành công!`);
     } catch (error: any) {
       console.error("Error generating certificates:", error);
       alert("Không thể tạo chứng chỉ: " + error.message);
@@ -182,7 +220,8 @@ export default function AdminCertificatesPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Quản lý chứng chỉ</h1>
         <p className="text-gray-600 mt-1">
-          Tạo và gửi chứng chỉ cho người tham gia sự kiện cá nhân
+          Xem trước và tạo chứng chỉ cho người tham gia sự kiện cá nhân đã kết
+          thúc
         </p>
       </div>
 
@@ -242,8 +281,8 @@ export default function AdminCertificatesPage() {
               Danh sách người tham gia
             </h2>
             <button
-              onClick={handleGenerateCertificates}
-              disabled={generating}
+              onClick={handleGenerateAll}
+              disabled={generating || participants.length === 0}
               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               {generating ? (
@@ -253,8 +292,8 @@ export default function AdminCertificatesPage() {
                 </>
               ) : (
                 <>
-                  <Award className="h-5 w-5" />
-                  <span>Tạo tất cả chứng chỉ</span>
+                  <Download className="h-5 w-5" />
+                  <span>Tạo tất cả & Tải ZIP</span>
                 </>
               )}
             </button>
@@ -267,7 +306,7 @@ export default function AdminCertificatesPage() {
           ) : participants.length === 0 ? (
             <div className="text-center py-8">
               <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">Chưa có người tham gia</p>
+              <p className="text-gray-500">Chưa có người tham gia hợp lệ</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -335,12 +374,13 @@ export default function AdminCertificatesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center space-x-2">
-                          <button className="flex items-center space-x-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg text-sm">
-                            <FileText className="h-4 w-4" />
-                            <span>Xem</span>
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handlePreview(participant)}
+                          className="flex items-center space-x-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg text-sm"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span>Xem trước</span>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -349,6 +389,14 @@ export default function AdminCertificatesPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewData && (
+        <CertificatePreview
+          data={previewData}
+          onClose={() => setPreviewData(null)}
+        />
       )}
     </div>
   );

@@ -1,9 +1,10 @@
-// app/api/events/[id]/generate-certificates/route.ts
+// app/api/events/[id]/generate-certificates/route.ts - GENERATE ZIP
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import puppeteer from "puppeteer";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
+import JSZip from "jszip";
 
 type CertificateData = {
   athleteName: string;
@@ -17,11 +18,10 @@ type CertificateData = {
 };
 
 /**
- * Generate certificate HTML with data
+ * Generate certificate HTML - Mẫu chứng chỉ có thể sửa tại đây
  */
 function generateCertificateHTML(data: CertificateData): string {
-  // Read the certificate template from your file
-  // For now, using inline template
+  // ĐÂY LÀ MẪU CHỨNG CHỈ - Bạn có thể sửa HTML này
   const template = `
 <!DOCTYPE html>
 <html lang="vi">
@@ -189,7 +189,7 @@ async function generatePDF(html: string): Promise<Buffer> {
 }
 
 /**
- * POST - Generate certificates for all participants of an event
+ * POST - Generate certificates ZIP for all participants
  */
 export async function POST(
   request: NextRequest,
@@ -209,7 +209,7 @@ export async function POST(
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    // Only generate for individual events that have ended
+    // Only individual events
     if (event.event_type !== "individual") {
       return NextResponse.json(
         { error: "Certificates only for individual events" },
@@ -217,17 +217,18 @@ export async function POST(
       );
     }
 
-    const today = new Date();
+    // Check if event has ended
+    const now = new Date();
     const eventEnd = new Date(event.end_date);
 
-    if (eventEnd > today) {
+    if (eventEnd >= now) {
       return NextResponse.json(
         { error: "Event has not ended yet" },
         { status: 400 }
       );
     }
 
-    // Get all participants with their activities
+    // Get participants
     const { data: participants, error: partsError } = await supabase
       .from("event_participants")
       .select(
@@ -245,26 +246,30 @@ export async function POST(
       );
     }
 
-    const certificates = [];
-
-    // Calculate event duration in days
+    // Calculate event duration
     const eventStart = new Date(event.start_date);
-    const totalDays = Math.ceil(
-      (eventEnd.getTime() - eventStart.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const totalDays =
+      Math.ceil(
+        (eventEnd.getTime() - eventStart.getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1;
+
+    // Create ZIP
+    const zip = new JSZip();
+    let count = 0;
 
     for (const participant of participants) {
-      // Get user's activities for this event
+      // Get activities
       const { data: activities } = await supabase
         .from("activities")
         .select("*")
         .eq("event_id", eventId)
         .eq("user_id", participant.user_id)
+        .gt("points_earned", 0)
         .order("activity_date", { ascending: false });
 
       if (!activities || activities.length === 0) continue;
 
-      // Calculate statistics
+      // Calculate stats
       const activeDays = new Set(activities.map((a) => a.activity_date)).size;
       const totalDistance = activities.reduce(
         (sum, a) => sum + (a.distance_km || 0),
@@ -289,30 +294,35 @@ export async function POST(
         email: participant.users.email,
       };
 
-      // Generate HTML and PDF
+      // Generate PDF
       const html = generateCertificateHTML(certificateData);
       const pdfBuffer = await generatePDF(html);
 
-      // TODO: Send email with PDF attachment
-      // You can use Resend, SendGrid, or other email services here
+      // Add to ZIP with safe filename
+      const safeFilename = participant.users.username
+        .replace(/[^a-z0-9]/gi, "_")
+        .toLowerCase();
+      zip.file(`certificate_${safeFilename}.pdf`, pdfBuffer);
 
-      certificates.push({
-        userId: participant.user_id,
-        userName: certificateData.athleteName,
-        email: certificateData.email,
-        stats: {
-          activeDays,
-          totalDays,
-          totalDistance: totalDistance.toFixed(1),
-          averagePace: certificateData.averagePace,
-        },
-      });
+      count++;
     }
 
-    return NextResponse.json({
-      success: true,
-      message: `Generated ${certificates.length} certificates`,
-      data: certificates,
+    if (count === 0) {
+      return NextResponse.json(
+        { error: "No valid participants to generate certificates" },
+        { status: 400 }
+      );
+    }
+
+    // Generate ZIP
+    const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+
+    // Return ZIP file
+    return new NextResponse(zipBuffer, {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="certificates_${event.name.replace(/[^a-z0-9]/gi, "_")}.zip"`,
+      },
     });
   } catch (error: any) {
     console.error("Certificate generation error:", error);
