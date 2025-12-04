@@ -1,4 +1,6 @@
-// app/admin/certificates/page.tsx - WITH PREVIEW & ZIP DOWNLOAD
+// =====================================================
+// FILE 2: app/admin/certificates/page.tsx - ADD TEMPLATE SELECTOR
+// =====================================================
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,7 +9,7 @@ import { createSupabaseClient } from "@/lib/supabase";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 import CertificatePreview from "@/components/CertificatePreview";
-
+import Link from "next/link";
 type Event = {
   id: string;
   name: string;
@@ -28,13 +30,24 @@ type Participant = {
   average_pace: string;
 };
 
+type Template = {
+  id: string;
+  name: string;
+  description: string;
+  pdf_url: string;
+  fields_config: any[];
+  is_active: boolean;
+};
+
 export default function AdminCertificatesPage() {
   const supabase = createSupabaseClient();
   const [events, setEvents] = useState<Event[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]); // ADDED
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [selectedEventData, setSelectedEventData] = useState<Event | null>(
     null
   );
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null); // ADDED
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -42,6 +55,7 @@ export default function AdminCertificatesPage() {
 
   useEffect(() => {
     loadEvents();
+    loadTemplates(); // ADDED
   }, []);
 
   const loadEvents = async () => {
@@ -77,6 +91,26 @@ export default function AdminCertificatesPage() {
       console.error("Error loading events:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ADDED: Load templates
+  const loadTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("certificate_templates")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setTemplates(data || []);
+      if (data && data.length > 0) {
+        setSelectedTemplate(data[0].id); // Auto-select first template
+      }
+    } catch (error) {
+      console.error("Error loading templates:", error);
     }
   };
 
@@ -175,8 +209,12 @@ export default function AdminCertificatesPage() {
     });
   };
 
+  // UPDATED: Pass template_id
   const handleGenerateAll = async () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || !selectedTemplate) {
+      alert("Vui lòng chọn sự kiện và template!");
+      return;
+    }
 
     if (!confirm(`Tạo ${participants.length} chứng chỉ và tải về file ZIP?`)) {
       return;
@@ -188,6 +226,8 @@ export default function AdminCertificatesPage() {
         `/api/events/${selectedEvent}/generate-certificates`,
         {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template_id: selectedTemplate }), // ADDED
         }
       );
 
@@ -195,7 +235,6 @@ export default function AdminCertificatesPage() {
         throw new Error("Failed to generate certificates");
       }
 
-      // Download ZIP file
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -217,12 +256,25 @@ export default function AdminCertificatesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Quản lý chứng chỉ</h1>
-        <p className="text-gray-600 mt-1">
-          Xem trước và tạo chứng chỉ cho người tham gia sự kiện cá nhân đã kết
-          thúc
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Quản lý chứng chỉ
+          </h1>
+          <p className="text-gray-600 mt-1">
+            Xem trước và tạo chứng chỉ cho người tham gia sự kiện cá nhân đã kết
+            thúc
+          </p>
+        </div>
+
+        {/* ADDED: Link to Templates Manager */}
+        <Link
+          href="/admin/certificates/templates"
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          <FileText className="h-5 w-5" />
+          Quản lý Templates
+        </Link>
       </div>
 
       {/* Event Selection */}
@@ -273,6 +325,81 @@ export default function AdminCertificatesPage() {
         )}
       </div>
 
+      {/* ADDED: Template Selection */}
+      {selectedEvent && templates.length > 0 && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">
+            Chọn template chứng chỉ
+          </h2>
+
+          {templates.length === 0 ? (
+            <div className="text-center py-8">
+              <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 mb-4">Chưa có template nào</p>
+              <Link
+                href="/admin/certificates/templates"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <FileText className="h-5 w-5" />
+                Tạo Template Đầu Tiên
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {templates.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => setSelectedTemplate(template.id)}
+                  className={`text-left p-4 border-2 rounded-lg transition-all ${
+                    selectedTemplate === template.id
+                      ? "border-purple-500 bg-purple-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <FileText
+                      className={`h-8 w-8 ${
+                        selectedTemplate === template.id
+                          ? "text-purple-600"
+                          : "text-gray-400"
+                      }`}
+                    />
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-900">
+                        {template.name}
+                      </h3>
+                      {template.description && (
+                        <p className="text-xs text-gray-600">
+                          {template.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {template.fields_config?.length || 0} trường dữ liệu
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Warning if no template selected */}
+      {selectedEvent && templates.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-yellow-800">
+            ⚠️ Bạn cần tạo ít nhất 1 template trước khi generate certificates.
+            <Link
+              href="/admin/certificates/templates"
+              className="underline font-medium ml-1"
+            >
+              Tạo template ngay
+            </Link>
+          </p>
+        </div>
+      )}
+
       {/* Participants List */}
       {selectedEvent && (
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -282,8 +409,10 @@ export default function AdminCertificatesPage() {
             </h2>
             <button
               onClick={handleGenerateAll}
-              disabled={generating || participants.length === 0}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              disabled={
+                generating || participants.length === 0 || !selectedTemplate
+              }
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {generating ? (
                 <>

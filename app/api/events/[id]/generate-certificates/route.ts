@@ -1,11 +1,12 @@
 // =====================================================
-// API Generate Certificates với Template System
+// FILE 3: app/api/events/[id]/generate-certificates/route.ts - FIXED
 // =====================================================
-
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/supabase";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import JSZip from "jszip";
+import { format } from "date-fns";
+import { vi } from "date-fns/locale";
 
 export async function POST(
   request: NextRequest,
@@ -15,45 +16,33 @@ export async function POST(
     const supabase = createSupabaseClient();
     const eventId = params.id;
 
-    // 1. Lấy template_id từ request (hoặc dùng default)
-    const body = await request.json().catch(() => ({}));
-    const templateId = body.template_id;
+    // 1. Get template_id from request body
+    const body = await request.json();
+    const { template_id } = body;
 
-    // 2. Load certificate template
-    let template;
-    if (templateId) {
-      const { data, error } = await supabase
-        .from("certificate_templates")
-        .select("*")
-        .eq("id", templateId)
-        .eq("is_active", true)
-        .single();
-
-      if (error || !data) {
-        return NextResponse.json(
-          { success: false, error: "Template not found" },
-          { status: 404 }
-        );
-      }
-      template = data;
-    } else {
-      // Lấy template active đầu tiên
-      const { data, error } = await supabase
-        .from("certificate_templates")
-        .select("*")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (error || !data) {
-        return NextResponse.json(
-          { success: false, error: "No active template found" },
-          { status: 404 }
-        );
-      }
-      template = data;
+    if (!template_id) {
+      return NextResponse.json(
+        { error: "template_id is required" },
+        { status: 400 }
+      );
     }
+
+    // 2. Load template from database
+    const { data: template, error: templateError } = await supabase
+      .from("certificate_templates")
+      .select("*")
+      .eq("id", template_id)
+      .eq("is_active", true)
+      .single();
+
+    if (templateError || !template) {
+      return NextResponse.json(
+        { error: "Template not found or inactive" },
+        { status: 404 }
+      );
+    }
+
+    console.log("Using template:", template.name);
 
     // 3. Load event data
     const { data: event, error: eventError } = await supabase
@@ -63,20 +52,36 @@ export async function POST(
       .single();
 
     if (eventError || !event) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+
+    // Only individual events
+    if (event.event_type !== "individual") {
       return NextResponse.json(
-        { success: false, error: "Event not found" },
-        { status: 404 }
+        { error: "Certificates only for individual events" },
+        { status: 400 }
       );
     }
 
-    // 4. Load participants với stats
+    // Check if event has ended
+    const now = new Date();
+    const eventEnd = new Date(event.end_date);
+
+    if (eventEnd >= now) {
+      return NextResponse.json(
+        { error: "Event has not ended yet" },
+        { status: 400 }
+      );
+    }
+
+    // 4. Calculate event duration
     const startDate = new Date(event.start_date);
-    const endDate = new Date(event.end_date);
     const totalDays =
       Math.ceil(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+        (eventEnd.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
       ) + 1;
 
+    // 5. Load participants
     const { data: participantsData } = await supabase
       .from("event_participants")
       .select(
@@ -90,12 +95,12 @@ export async function POST(
 
     if (!participantsData || participantsData.length === 0) {
       return NextResponse.json(
-        { success: false, error: "No participants found" },
+        { error: "No participants found" },
         { status: 404 }
       );
     }
 
-    // 5. Tính stats cho từng participant
+    // 6. Calculate stats for each participant
     const participantsWithStats = await Promise.all(
       participantsData.map(async (p) => {
         const { data: activities } = await supabase
@@ -131,89 +136,128 @@ export async function POST(
       })
     );
 
-    // 6. Download PDF template
-    const pdfBytes = await fetch(template.pdf_url).then((res) =>
-      res.arrayBuffer()
-    );
+    // 7. Download PDF template
+    console.log("Downloading PDF template from:", template.pdf_url);
+    const templateResponse = await fetch(template.pdf_url);
+    if (!templateResponse.ok) {
+      throw new Error("Failed to download PDF template");
+    }
+    const templateBytes = await templateResponse.arrayBuffer();
 
-    // 7. Generate certificates cho tất cả participants
+    // 8. Generate certificates for all participants
     const zip = new JSZip();
+    let count = 0;
+
+    console.log(`Processing ${participantsWithStats.length} participants...`);
 
     for (const participant of participantsWithStats) {
-      // Load template PDF
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-      const page = pdfDoc.getPages()[0];
-      const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      try {
+        // Load PDF template
+        const pdfDoc = await PDFDocument.load(templateBytes);
+        const page = pdfDoc.getPages()[0];
+        const { height } = page.getSize();
 
-      // Data mapping
-      const dataMap: Record<string, string> = {
-        athleteName: participant.full_name || participant.username,
-        eventName: event.name,
-        activeDays: participant.active_days.toString(),
-        totalDays: participant.total_days.toString(),
-        totalDistance: participant.total_distance.toFixed(1),
-        averagePace: participant.average_pace,
-        completionDate: new Date(event.end_date).toLocaleDateString("vi-VN", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }),
-      };
+        // Load fonts
+        const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const helveticaBold = await pdfDoc.embedFont(
+          StandardFonts.HelveticaBold
+        );
 
-      // Vẽ text lên PDF theo config
-      const fieldsConfig = template.fields_config as any[];
+        // Data mapping
+        const dataMap: Record<string, string> = {
+          athleteName: participant.full_name || participant.username,
+          eventName: event.name,
+          activeDays: participant.active_days.toString(),
+          totalDays: participant.total_days.toString(),
+          totalDistance: participant.total_distance.toFixed(1),
+          averagePace: participant.average_pace,
+          completionDate: format(eventEnd, "MMMM dd, yyyy", { locale: vi }),
+        };
 
-      for (const field of fieldsConfig) {
-        const value = dataMap[field.type] || field.placeholder;
-        const selectedFont = field.fontWeight === "bold" ? font : normalFont;
+        // Draw fields according to template config
+        const fieldsConfig = template.fields_config as any[];
 
-        // Convert color hex to RGB
-        const hexColor = field.fontColor || "#000000";
-        const r = parseInt(hexColor.slice(1, 3), 16) / 255;
-        const g = parseInt(hexColor.slice(3, 5), 16) / 255;
-        const b = parseInt(hexColor.slice(5, 7), 16) / 255;
+        for (const field of fieldsConfig) {
+          const value = dataMap[field.type] || field.placeholder || "";
+          const selectedFont =
+            field.fontWeight === "bold" ? helveticaBold : helvetica;
 
-        // Tính position (PDF coordinates from bottom-left)
-        const pageHeight = page.getHeight();
-        const yPosition = pageHeight - field.y - field.height;
+          // Convert hex color to RGB
+          const hexColor = field.fontColor || "#000000";
+          const r = parseInt(hexColor.slice(1, 3), 16) / 255;
+          const g = parseInt(hexColor.slice(3, 5), 16) / 255;
+          const b = parseInt(hexColor.slice(5, 7), 16) / 255;
 
-        let xPosition = field.x;
-        if (field.textAlign === "center") {
-          const textWidth = selectedFont.widthOfTextAtSize(
-            value,
-            field.fontSize
-          );
-          xPosition = field.x + (field.width - textWidth) / 2;
-        } else if (field.textAlign === "right") {
-          const textWidth = selectedFont.widthOfTextAtSize(
-            value,
-            field.fontSize
-          );
-          xPosition = field.x + field.width - textWidth;
+          // Calculate x position based on alignment
+          let xPosition = field.x;
+          if (field.textAlign === "center") {
+            const textWidth = selectedFont.widthOfTextAtSize(
+              value,
+              field.fontSize
+            );
+            xPosition = field.x + (field.width - textWidth) / 2;
+          } else if (field.textAlign === "right") {
+            const textWidth = selectedFont.widthOfTextAtSize(
+              value,
+              field.fontSize
+            );
+            xPosition = field.x + field.width - textWidth;
+          }
+
+          // Draw text (convert Y from top-left to bottom-left coordinate system)
+          page.drawText(value, {
+            x: xPosition,
+            y: height - field.y - field.fontSize,
+            size: field.fontSize,
+            font: selectedFont,
+            color: rgb(r, g, b),
+          });
         }
 
-        page.drawText(value, {
-          x: xPosition,
-          y: yPosition + field.height / 2 - field.fontSize / 2,
-          size: field.fontSize,
-          font: selectedFont,
-          color: rgb(r, g, b),
-        });
+        // Save PDF
+        const modifiedPdfBytes = await pdfDoc.save();
+
+        // Add to ZIP with safe filename
+        const safeFilename = participant.username
+          .replace(/[^a-z0-9]/gi, "_")
+          .toLowerCase();
+        zip.file(
+          `certificate_${safeFilename}_${event.name.replace(/\s+/g, "_")}.pdf`,
+          modifiedPdfBytes
+        );
+
+        count++;
+        console.log(
+          `✓ Generated certificate ${count}/${participantsWithStats.length}`
+        );
+      } catch (error) {
+        console.error(
+          `Error generating certificate for ${participant.username}:`,
+          error
+        );
+        // Continue with next participant
       }
-
-      // Save PDF
-      const modifiedPdfBytes = await pdfDoc.save();
-
-      // Add to ZIP
-      const filename = `certificate_${participant.username}_${event.name.replace(/\s+/g, "_")}.pdf`;
-      zip.file(filename, modifiedPdfBytes);
     }
 
-    // 8. Generate ZIP file
-    const zipBlob = await zip.generateAsync({ type: "nodebuffer" });
+    if (count === 0) {
+      return NextResponse.json(
+        { error: "No certificates were generated" },
+        { status: 500 }
+      );
+    }
 
-    // 9. Return ZIP
+    console.log(`Generating ZIP file with ${count} certificates...`);
+
+    // 9. Generate ZIP
+    const zipBlob = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+
+    console.log("✓ ZIP file generated successfully");
+
+    // 10. Return ZIP file
     return new NextResponse(zipBlob, {
       headers: {
         "Content-Type": "application/zip",
@@ -223,7 +267,7 @@ export async function POST(
   } catch (error: any) {
     console.error("Generate certificates error:", error);
     return NextResponse.json(
-      { success: false, error: error.message },
+      { error: error.message || "Failed to generate certificates" },
       { status: 500 }
     );
   }
