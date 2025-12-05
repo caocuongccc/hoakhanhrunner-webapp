@@ -1,4 +1,7 @@
-// app/admin/layout.tsx - FIXED: Remove top menu, fix logout button
+// =====================================================
+// FILE: app/admin/layout.tsx - ADD PDF.js GLOBALLY
+// =====================================================
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,6 +10,7 @@ import Link from "next/link";
 import AdminAuthProvider, {
   useAdminAuth,
 } from "@/components/AdminAuthProvider";
+import Script from "next/script"; // ✅ Import Next.js Script
 import {
   LayoutDashboard,
   Calendar,
@@ -25,7 +29,19 @@ export default function AdminLayout({
 }) {
   return (
     <AdminAuthProvider>
-      {/* NO NAVIGATION WRAPPER - Admin doesn't use the main app Navigation */}
+      {/* ✅ CRITICAL: Load PDF.js globally for admin */}
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+        strategy="beforeInteractive"
+        onLoad={() => {
+          if (typeof window !== "undefined" && (window as any).pdfjsLib) {
+            (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc =
+              "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            console.log("✅ PDF.js loaded globally");
+          }
+        }}
+      />
+
       <AdminLayoutContent>{children}</AdminLayoutContent>
     </AdminAuthProvider>
   );
@@ -82,7 +98,6 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      {/* <aside className="w-64 bg-white shadow-lg flex flex-col fixed h-full z-50"> */}
       <aside className="w-64 bg-white shadow-lg flex flex-col fixed top-0 left-0 h-screen z-[9999]">
         <div className="p-6 border-b">
           <h2 className="text-xl font-bold text-gray-900">Admin Panel</h2>
@@ -117,11 +132,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Logout Button - Always visible at bottom */}
+        {/* Logout Button */}
         <div className="p-4 border-t bg-white">
           <button
             onClick={handleLogout}
-            // className="flex items-center justify-center space-x-2 w-full px-4 py-3 rounded-lg text-white bg-red-600 hover:bg-red-700 transition-colors shadow-md"
             className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg text-white bg-red-600 hover:bg-red-700 transition-colors shadow-md z-[10000] relative"
           >
             <LogOut className="h-5 w-5" />
@@ -130,7 +144,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main Content - NO TOP MENU */}
+      {/* Main Content */}
       <main className="flex-1 ml-64 p-8">{children}</main>
     </div>
   );

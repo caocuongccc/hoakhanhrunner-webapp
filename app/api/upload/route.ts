@@ -1,3 +1,6 @@
+// =====================================================
+// FILE: app/api/upload/route.ts - FIXED VERSION WITH PUBLIC ACCESS
+// =====================================================
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -21,21 +24,29 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Upload to Cloudinary
+    // Determine resource type
+    const isPdf = file.type === "application/pdf";
+
+    // Upload to Cloudinary with PUBLIC access
     const result = await new Promise<any>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
           {
             folder: folder,
-            resource_type: "auto",
-            transformation: [
-              {
-                width: 1200,
-                height: 1200,
-                crop: "limit",
-                quality: "auto:good",
-              },
-            ],
+            resource_type: isPdf ? "raw" : "auto", // Use "raw" for PDFs
+            type: "upload", // IMPORTANT: Set type to "upload" for public access
+            access_mode: "public", // IMPORTANT: Make it publicly accessible
+            // For images, add transformation
+            transformation: isPdf
+              ? undefined
+              : [
+                  {
+                    width: 1200,
+                    height: 1200,
+                    crop: "limit",
+                    quality: "auto:good",
+                  },
+                ],
           },
           (error, result) => {
             if (error) reject(error);
@@ -45,11 +56,15 @@ export async function POST(request: NextRequest) {
         .end(buffer);
     });
 
+    console.log("✅ Uploaded to Cloudinary:", result.secure_url);
+
     return NextResponse.json({
       url: result.secure_url,
       public_id: result.public_id,
       width: result.width,
       height: result.height,
+      resource_type: result.resource_type,
+      format: result.format,
     });
   } catch (error: any) {
     console.error("Upload error:", error);
@@ -62,7 +77,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { public_id } = await request.json();
+    const { public_id, resource_type } = await request.json();
 
     if (!public_id) {
       return NextResponse.json(
@@ -71,7 +86,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await cloudinary.uploader.destroy(public_id);
+    // Delete with correct resource_type
+    await cloudinary.uploader.destroy(public_id, {
+      resource_type: resource_type || "image",
+      type: "upload",
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -79,6 +98,44 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(
       { error: error.message || "Delete failed" },
       { status: 500 }
+    );
+  }
+}
+
+// =====================================================
+// HELPER: Verify Cloudinary URL is accessible
+// =====================================================
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl;
+    const url = searchParams.get("url");
+
+    if (!url) {
+      return NextResponse.json({ error: "URL required" }, { status: 400 });
+    }
+
+    // Try to fetch the URL
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return NextResponse.json(
+        {
+          accessible: false,
+          error: `HTTP ${response.status}: ${response.statusText}`,
+        },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json({
+      accessible: true,
+      contentType: response.headers.get("content-type"),
+      size: response.headers.get("content-length"),
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { accessible: false, error: error.message },
+      { status: 200 }
     );
   }
 }
