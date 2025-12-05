@@ -1,10 +1,12 @@
-// app/login/page.tsx
+// app/login/page.tsx - UPDATED WITH STRAVA BRAND COMPLIANCE
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+
+const STRAVA_ORANGE = "#FC4C02";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,7 +27,6 @@ export default function LoginPage() {
     const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
     const redirectUri = `${window.location.origin}/api/auth/strava/callback`;
 
-    // Build scope based on permissions
     let scope = "read,activity:read_all";
     if (permissions.activityWrite) {
       scope += ",activity:write";
@@ -82,11 +83,9 @@ export default function LoginPage() {
             <div className="flex items-start space-x-3">
               <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-gray-900">
-                  Theo dõi hoạt động
-                </h3>
+                <h3 className="font-semibold text-gray-900">Tự động đồng bộ</h3>
                 <p className="text-sm text-gray-600">
-                  Tự động đồng bộ các hoạt động chạy bộ từ Strava
+                  Hoạt động chạy bộ từ Strava được đồng bộ tự động qua webhook
                 </p>
               </div>
             </div>
@@ -97,7 +96,7 @@ export default function LoginPage() {
                   Xếp hạng và phần thưởng
                 </h3>
                 <p className="text-sm text-gray-600">
-                  Cạnh tranh với bạn bè và nhận phần thưởng
+                  Cạnh tranh với bạn bè và nhận chứng chỉ hoàn thành
                 </p>
               </div>
             </div>
@@ -110,13 +109,12 @@ export default function LoginPage() {
               Quyền truy cập cần thiết
             </h3>
             <div className="space-y-3 text-sm">
-              {/* Read Permission - Always required */}
               <label className="flex items-start space-x-3 cursor-not-allowed opacity-60">
                 <input
                   type="checkbox"
                   checked={true}
                   disabled
-                  className="mt-1 cursor-not-allowed"
+                  className="mt-1"
                 />
                 <div>
                   <strong className="text-blue-900">
@@ -128,13 +126,12 @@ export default function LoginPage() {
                 </div>
               </label>
 
-              {/* Activity Read - Always required */}
               <label className="flex items-start space-x-3 cursor-not-allowed opacity-60">
                 <input
                   type="checkbox"
                   checked={true}
                   disabled
-                  className="mt-1 cursor-not-allowed"
+                  className="mt-1"
                 />
                 <div>
                   <strong className="text-blue-900">
@@ -146,7 +143,6 @@ export default function LoginPage() {
                 </div>
               </label>
 
-              {/* Activity Write - Optional */}
               <label className="flex items-start space-x-3 cursor-pointer hover:bg-blue-100 p-2 rounded transition-colors">
                 <input
                   type="checkbox"
@@ -157,63 +153,75 @@ export default function LoginPage() {
                       activityWrite: e.target.checked,
                     })
                   }
-                  className="mt-1 cursor-pointer"
+                  className="mt-1"
                 />
                 <div>
                   <strong className="text-blue-900">
                     Ghi hoạt động (Tùy chọn)
                   </strong>
                   <p className="text-blue-700">
-                    Cập nhật mô tả hoạt động với badge sự kiện. Bạn có thể bỏ
-                    qua nếu không muốn.
+                    Cập nhật mô tả hoạt động với badge sự kiện
                   </p>
                 </div>
               </label>
             </div>
-            <p className="text-xs text-blue-700 mt-3 bg-blue-100 p-2 rounded">
-              <strong>Lưu ý:</strong> Bạn có thể thu hồi quyền truy cập bất cứ
-              lúc nào trong{" "}
-              <a
-                href="https://www.strava.com/settings/apps"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline font-medium"
-              >
-                cài đặt Strava
-              </a>
-              .
-            </p>
           </div>
 
-          {/* Strava Connect Button */}
+          {/* Strava Connect Button - OFFICIAL STYLE */}
           <button
             onClick={handleStravaLogin}
-            className="w-full flex items-center justify-center space-x-3 px-6 py-4 bg-[#FC4C02] hover:bg-[#E34402] text-white font-semibold rounded-lg transition-colors shadow-md"
+            className="w-full flex items-center justify-center space-x-3 px-6 py-4 text-white font-semibold rounded-lg transition-opacity hover:opacity-90 shadow-md"
+            style={{ backgroundColor: STRAVA_ORANGE }}
           >
             <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
               <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
             </svg>
-            <span>Đăng nhập với Strava</span>
+            <span>Connect with Strava</span>
           </button>
 
           {/* Privacy Note */}
-          <p className="text-xs text-gray-500 text-center">
-            Bằng cách đăng nhập, bạn đồng ý với{" "}
-            <a href="/terms" className="underline">
-              Điều khoản sử dụng
-            </a>{" "}
-            và{" "}
-            <a href="/privacy" className="underline">
-              Chính sách bảo mật
+          <div className="space-y-2 text-xs text-gray-600 text-center">
+            <p>
+              Bằng cách kết nối, bạn đồng ý với{" "}
+              <a href="/terms" className="underline hover:text-gray-900">
+                Điều khoản sử dụng
+              </a>
+              {" và "}
+              <a href="/privacy" className="underline hover:text-gray-900">
+                Chính sách bảo mật
+              </a>
+            </p>
+            <p>
+              Bạn có thể thu hồi quyền truy cập bất cứ lúc nào tại{" "}
+              <a
+                href="https://www.strava.com/settings/apps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-gray-900 font-medium"
+              >
+                Strava Settings
+              </a>
+            </p>
+          </div>
+
+          {/* Strava API Agreement Link */}
+          <div className="text-center pt-4 border-t">
+            <a
+              href="https://www.strava.com/legal/api"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-gray-500 hover:text-gray-700 underline"
+            >
+              Strava API Agreement
             </a>
-          </p>
+          </div>
         </div>
 
         {/* Admin Login Link */}
         <div className="text-center">
           <a
             href="/admin-login"
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            className="text-sm text-gray-500 hover:text-gray-700"
           >
             Bạn là quản trị viên?{" "}
             <span className="underline">Đăng nhập tại đây</span>
@@ -222,10 +230,7 @@ export default function LoginPage() {
 
         {/* Back to Home */}
         <div className="text-center">
-          <a
-            href="/"
-            className="text-gray-600 hover:text-gray-900 text-sm transition-colors"
-          >
+          <a href="/" className="text-gray-600 hover:text-gray-900 text-sm">
             ← Quay lại trang chủ
           </a>
         </div>

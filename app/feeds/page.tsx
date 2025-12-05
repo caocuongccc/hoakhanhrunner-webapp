@@ -1,22 +1,15 @@
-// app/feeds/page.tsx - FIXED: Show strava_activities from last 30 days
+// app/feeds/page.tsx - WITH STRAVA ATTRIBUTION
 "use client";
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
-import {
-  Activity,
-  Heart,
-  MessageCircle,
-  Share2,
-  MapPin,
-  Clock,
-  TrendingUp,
-  Calendar,
-} from "lucide-react";
+import { Activity, MapPin, Clock, TrendingUp, Calendar } from "lucide-react";
 import { createSupabaseClient } from "@/lib/supabase";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
+
+const STRAVA_ORANGE = "#FC4C02";
 
 type StravaActivityFeed = {
   id: string;
@@ -60,7 +53,6 @@ export default function FeedsPage() {
     try {
       setLoading(true);
 
-      // Get activities from last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -90,18 +82,13 @@ export default function FeedsPage() {
         .order("start_date_local", { ascending: false })
         .limit(50);
 
-      // Filter by mine
       if (filter === "mine") {
         query = query.eq("user_id", user?.id);
       }
 
       const { data, error } = await query;
 
-      if (error) {
-        console.error("Error loading activities:", error);
-        throw error;
-      }
-
+      if (error) throw error;
       setActivities(data || []);
     } catch (error) {
       console.error("Error loading activities:", error);
@@ -138,12 +125,26 @@ export default function FeedsPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 max-w-4xl">
-        {/* Header */}
+        {/* Header with Powered by Strava */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Bảng tin</h1>
-          <p className="text-gray-600">
-            Hoạt động chạy bộ 30 ngày gần đây từ Strava
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-gray-600">Hoạt động chạy bộ 30 ngày gần đây</p>
+
+            {/* Powered by Strava Badge */}
+            <div className="flex items-center gap-2 px-3 py-1 bg-white border border-gray-200 rounded-lg">
+              <span className="text-xs text-gray-600">Powered by</span>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill={STRAVA_ORANGE}>
+                <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+              </svg>
+              <span
+                className="text-xs font-semibold"
+                style={{ color: STRAVA_ORANGE }}
+              >
+                Strava
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Filters */}
@@ -233,7 +234,24 @@ export default function FeedsPage() {
                       </span>
                     </div>
                   </div>
-                  <Activity className="h-5 w-5 text-orange-500 flex-shrink-0" />
+
+                  {/* Strava Link - REQUIRED */}
+                  <a
+                    href={`https://www.strava.com/activities/${activity.strava_activity_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-sm font-medium hover:opacity-80 transition-opacity"
+                    style={{ color: STRAVA_ORANGE }}
+                  >
+                    <span>View on Strava</span>
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                    </svg>
+                  </a>
                 </div>
 
                 {/* Activity Details */}
@@ -272,34 +290,6 @@ export default function FeedsPage() {
                       <div className="text-xs text-gray-500">pace</div>
                     </div>
                   </div>
-
-                  {/* Strava Link */}
-                  <div className="mt-3">
-                    <a
-                      href={`https://www.strava.com/activities/${activity.strava_activity_id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      Xem trên Strava →
-                    </a>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="border-t px-4 py-3 flex items-center justify-around text-gray-600">
-                  <button className="flex items-center space-x-2 hover:text-red-500 transition-colors">
-                    <Heart className="h-5 w-5" />
-                    <span className="text-sm">Thích</span>
-                  </button>
-                  <button className="flex items-center space-x-2 hover:text-blue-500 transition-colors">
-                    <MessageCircle className="h-5 w-5" />
-                    <span className="text-sm">Bình luận</span>
-                  </button>
-                  <button className="flex items-center space-x-2 hover:text-green-500 transition-colors">
-                    <Share2 className="h-5 w-5" />
-                    <span className="text-sm">Chia sẻ</span>
-                  </button>
                 </div>
               </div>
             ))
