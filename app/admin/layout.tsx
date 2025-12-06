@@ -1,7 +1,4 @@
-// =====================================================
-// FILE: app/admin/layout.tsx - ADD PDF.js GLOBALLY
-// =====================================================
-
+// app/admin/layout.tsx - UPDATED WITH FIELD TYPES MENU
 "use client";
 
 import { useEffect, useState } from "react";
@@ -10,7 +7,7 @@ import Link from "next/link";
 import AdminAuthProvider, {
   useAdminAuth,
 } from "@/components/AdminAuthProvider";
-import Script from "next/script"; // ✅ Import Next.js Script
+import Script from "next/script";
 import {
   LayoutDashboard,
   Calendar,
@@ -20,6 +17,9 @@ import {
   ChevronRight,
   LogOut,
   Award,
+  ChevronDown,
+  FileText,
+  Tag,
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -29,7 +29,6 @@ export default function AdminLayout({
 }) {
   return (
     <AdminAuthProvider>
-      {/* ✅ CRITICAL: Load PDF.js globally for admin */}
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
         strategy="beforeInteractive"
@@ -52,6 +51,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [activeTab, setActiveTab] = useState("");
+  const [certificateMenuOpen, setCertificateMenuOpen] = useState(false);
 
   useEffect(() => {
     if (pathname !== "/admin-login" && !loading && !admin) {
@@ -61,6 +61,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setActiveTab(pathname);
+    // Auto-open certificate menu if on any certificate page
+    if (pathname.startsWith("/admin/certificates")) {
+      setCertificateMenuOpen(true);
+    }
   }, [pathname]);
 
   if (pathname === "/admin-login") {
@@ -84,7 +88,25 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     { href: "/admin/events", label: "Sự kiện", icon: Calendar },
     { href: "/admin/teams", label: "Đội", icon: Users },
     { href: "/admin/members", label: "Thành viên", icon: Users },
-    { href: "/admin/certificates", label: "Chứng chỉ", icon: Award },
+    {
+      href: "/admin/certificates",
+      label: "Chứng chỉ",
+      icon: Award,
+      hasSubmenu: true,
+      submenu: [
+        { href: "/admin/certificates", label: "Tổng quan", icon: Award },
+        {
+          href: "/admin/certificates/templates",
+          label: "Templates",
+          icon: FileText,
+        },
+        {
+          href: "/admin/certificates/field-types",
+          label: "Field Types",
+          icon: Tag,
+        },
+      ],
+    },
     { href: "/admin/strava", label: "Strava", icon: Activity },
     { href: "/admin/settings", label: "Cài đặt", icon: Settings },
   ];
@@ -114,6 +136,61 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               activeTab === item.href ||
               (activeTab.startsWith(item.href) && item.href !== "/admin");
 
+            // Menu item with submenu
+            if (item.hasSubmenu && item.submenu) {
+              return (
+                <div key={item.href}>
+                  <button
+                    onClick={() => setCertificateMenuOpen(!certificateMenuOpen)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                      activeTab.startsWith(item.href)
+                        ? "bg-blue-50 text-blue-600"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Icon className="h-5 w-5" />
+                      <span className="font-medium">{item.label}</span>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${
+                        certificateMenuOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu */}
+                  {certificateMenuOpen && (
+                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 pl-2">
+                      {item.submenu.map((subItem) => {
+                        const SubIcon = subItem.icon;
+                        const isSubActive = activeTab === subItem.href;
+
+                        return (
+                          <Link
+                            key={subItem.href}
+                            href={subItem.href}
+                            className={`flex items-center space-x-3 px-4 py-2 rounded-lg transition-colors text-sm ${
+                              isSubActive
+                                ? "bg-blue-50 text-blue-600"
+                                : "text-gray-600 hover:bg-gray-100"
+                            }`}
+                          >
+                            <SubIcon className="h-4 w-4" />
+                            <span className="font-medium">{subItem.label}</span>
+                            {isSubActive && (
+                              <ChevronRight className="h-3 w-3 ml-auto" />
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Regular menu item
             return (
               <Link
                 key={item.href}
