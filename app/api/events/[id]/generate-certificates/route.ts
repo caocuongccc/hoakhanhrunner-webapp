@@ -1,6 +1,4 @@
-// =====================================================
-// FILE 3: app/api/events/[id]/generate-certificates/route.ts - FIXED
-// =====================================================
+// app/api/events/[id]/generate-certificates/route.ts - FIXED Y-COORDINATE
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/supabase";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
@@ -16,7 +14,6 @@ export async function POST(
     const supabase = createSupabaseClient();
     const eventId = params.id;
 
-    // 1. Get template_id from request body
     const body = await request.json();
     const { template_id } = body;
 
@@ -27,7 +24,7 @@ export async function POST(
       );
     }
 
-    // 2. Load template from database
+    // Load template
     const { data: template, error: templateError } = await supabase
       .from("certificate_templates")
       .select("*")
@@ -37,14 +34,12 @@ export async function POST(
 
     if (templateError || !template) {
       return NextResponse.json(
-        { error: "Template not found or inactive" },
+        { error: "Template not found" },
         { status: 404 }
       );
     }
 
-    console.log("Using template:", template.name);
-
-    // 3. Load event data
+    // Load event
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select("*")
@@ -55,7 +50,6 @@ export async function POST(
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    // Only individual events
     if (event.event_type !== "individual") {
       return NextResponse.json(
         { error: "Certificates only for individual events" },
@@ -63,7 +57,6 @@ export async function POST(
       );
     }
 
-    // Check if event has ended
     const now = new Date();
     const eventEnd = new Date(event.end_date);
 
@@ -74,14 +67,13 @@ export async function POST(
       );
     }
 
-    // 4. Calculate event duration
     const startDate = new Date(event.start_date);
     const totalDays =
       Math.ceil(
         (eventEnd.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
       ) + 1;
 
-    // 5. Load participants
+    // Load participants
     const { data: participantsData } = await supabase
       .from("event_participants")
       .select(
@@ -100,7 +92,7 @@ export async function POST(
       );
     }
 
-    // 6. Calculate stats for each participant
+    // Calculate stats
     const participantsWithStats = await Promise.all(
       participantsData.map(async (p) => {
         const { data: activities } = await supabase
@@ -136,7 +128,7 @@ export async function POST(
       })
     );
 
-    // 7. Download PDF template
+    // Download PDF template
     console.log("Downloading PDF template from:", template.pdf_url);
     const templateResponse = await fetch(template.pdf_url);
     if (!templateResponse.ok) {
@@ -144,7 +136,7 @@ export async function POST(
     }
     const templateBytes = await templateResponse.arrayBuffer();
 
-    // 8. Generate certificates for all participants
+    // Generate certificates
     const zip = new JSZip();
     let count = 0;
 
@@ -152,10 +144,12 @@ export async function POST(
 
     for (const participant of participantsWithStats) {
       try {
-        // Load PDF template
+        // Load PDF template for each participant
         const pdfDoc = await PDFDocument.load(templateBytes);
         const page = pdfDoc.getPages()[0];
         const { height } = page.getSize();
+
+        console.log(`📏 PDF page dimensions: height=${height}px`);
 
         // Load fonts
         const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -174,7 +168,7 @@ export async function POST(
           completionDate: format(eventEnd, "MMMM dd, yyyy", { locale: vi }),
         };
 
-        // Draw fields according to template config
+        // Draw fields
         const fieldsConfig = template.fields_config as any[];
 
         for (const field of fieldsConfig) {
@@ -190,24 +184,40 @@ export async function POST(
 
           // Calculate x position based on alignment
           let xPosition = field.x;
+          const textWidth = selectedFont.widthOfTextAtSize(
+            value,
+            field.fontSize
+          );
+
           if (field.textAlign === "center") {
-            const textWidth = selectedFont.widthOfTextAtSize(
-              value,
-              field.fontSize
-            );
             xPosition = field.x + (field.width - textWidth) / 2;
           } else if (field.textAlign === "right") {
-            const textWidth = selectedFont.widthOfTextAtSize(
-              value,
-              field.fontSize
-            );
             xPosition = field.x + field.width - textWidth;
           }
 
-          // Draw text (convert Y from top-left to bottom-left coordinate system)
+          // CRITICAL FIX: Correct Y coordinate calculation
+          // Editor coordinates: Y from top (0 at top)
+          // PDF coordinates: Y from bottom (0 at bottom)
+          //
+          // If field.y = 100 (100px from top in editor)
+          // PDF Y should be: pageHeight - 100 - field.height
+          //
+          // For text, we need to position at the BASELINE of the text
+          // The baseline is approximately at the bottom of the text box
+          const yPosition = height - field.y - field.height;
+
+          console.log(`📍 Field ${field.type}:`, {
+            editorY: field.y,
+            fieldHeight: field.height,
+            pdfY: yPosition,
+            fontSize: field.fontSize,
+            pageHeight: height,
+          });
+
+          // Draw text
           page.drawText(value, {
             x: xPosition,
-            y: height - field.y - field.fontSize,
+            y: yPosition,
             size: field.fontSize,
             font: selectedFont,
             color: rgb(r, g, b),
@@ -217,7 +227,7 @@ export async function POST(
         // Save PDF
         const modifiedPdfBytes = await pdfDoc.save();
 
-        // Add to ZIP with safe filename
+        // Add to ZIP
         const safeFilename = participant.username
           .replace(/[^a-z0-9]/gi, "_")
           .toLowerCase();
@@ -235,7 +245,6 @@ export async function POST(
           `Error generating certificate for ${participant.username}:`,
           error
         );
-        // Continue with next participant
       }
     }
 
@@ -248,7 +257,7 @@ export async function POST(
 
     console.log(`Generating ZIP file with ${count} certificates...`);
 
-    // 9. Generate ZIP
+    // Generate ZIP
     const zipBlob = await zip.generateAsync({
       type: "nodebuffer",
       compression: "DEFLATE",
@@ -257,7 +266,7 @@ export async function POST(
 
     console.log("✓ ZIP file generated successfully");
 
-    // 10. Return ZIP file
+    // Return ZIP file
     return new NextResponse(zipBlob, {
       headers: {
         "Content-Type": "application/zip",

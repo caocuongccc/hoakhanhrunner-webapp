@@ -1,6 +1,4 @@
-// =====================================================
-// FILE 1: components/CertificatePreview.tsx - UPDATED WITH TEMPLATE
-// =====================================================
+// components/CertificatePreview.tsx - FIXED VERSION
 "use client";
 
 import { X } from "lucide-react";
@@ -15,43 +13,102 @@ type CertificatePreviewProps = {
     totalDistance: number;
     averagePace: string;
     completionDate: string;
-    template?: {
-      pdf_url: string;
-      fields_config: any[];
-    };
   };
+  templateId?: string; // ADDED: Template ID for preview
   onClose: () => void;
 };
 
 export default function CertificatePreview({
   data,
+  templateId,
   onClose,
 }: CertificatePreviewProps) {
+  const [template, setTemplate] = useState<any>(null);
   const [pdfDataUrl, setPdfDataUrl] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (data.template?.pdf_url) {
-      loadPdfAsImage();
+    if (templateId) {
+      loadTemplate();
     } else {
       setLoading(false);
     }
-  }, [data.template?.pdf_url]);
+  }, [templateId]);
 
-  const loadPdfAsImage = async () => {
+  const loadTemplate = async () => {
     try {
-      // Convert PDF to image for preview
+      setLoading(true);
+      setError(null);
+
+      // Load template from API
       const response = await fetch(
-        `/api/pdf-to-image?url=${encodeURIComponent(data.template!.pdf_url)}`
+        `/api/admin/certificate-templates/${templateId}`
       );
-      if (response.ok) {
-        const blob = await response.blob();
-        setPdfDataUrl(URL.createObjectURL(blob));
+
+      if (!response.ok) {
+        throw new Error("Failed to load template");
       }
-    } catch (error) {
-      console.error("Error loading PDF:", error);
-    } finally {
+
+      const result = await response.json();
+
+      if (!result.success || !result.template) {
+        throw new Error("Template not found");
+      }
+
+      setTemplate(result.template);
+
+      // Load PDF as background image
+      if (result.template.pdf_url) {
+        await loadPdfAsImage(result.template.pdf_url);
+      }
+
       setLoading(false);
+    } catch (err: any) {
+      console.error("Error loading template:", err);
+      setError(err.message || "Failed to load template");
+      setLoading(false);
+    }
+  };
+
+  const loadPdfAsImage = async (pdfUrl: string) => {
+    try {
+      // Check if PDF.js is loaded
+      const pdfjsLib = (window as any).pdfjsLib;
+      if (!pdfjsLib) {
+        throw new Error("PDF.js not loaded");
+      }
+
+      // Load PDF
+      const loadingTask = pdfjsLib.getDocument(pdfUrl);
+      const pdf = await loadingTask.promise;
+      const page = await pdf.getPage(1);
+
+      // Create canvas
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Cannot get canvas context");
+
+      // Calculate size
+      const desiredWidth = 1000;
+      const viewport = page.getViewport({ scale: 1 });
+      const renderScale = desiredWidth / viewport.width;
+      const scaledViewport = page.getViewport({ scale: renderScale });
+
+      canvas.width = scaledViewport.width;
+      canvas.height = scaledViewport.height;
+
+      // Render PDF to canvas
+      await page.render({
+        canvasContext: context,
+        viewport: scaledViewport,
+      }).promise;
+
+      // Convert to data URL
+      setPdfDataUrl(canvas.toDataURL("image/png"));
+    } catch (err: any) {
+      console.error("Error loading PDF:", err);
+      setError(err.message || "Failed to load PDF");
     }
   };
 
@@ -77,11 +134,19 @@ export default function CertificatePreview({
         </button>
 
         <div className="p-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Xem trước Certificate
+          </h2>
+
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             </div>
-          ) : data.template ? (
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              <strong>Lỗi:</strong> {error}
+            </div>
+          ) : template ? (
             // Preview with template
             <div
               style={{
@@ -94,11 +159,12 @@ export default function CertificatePreview({
                 backgroundImage: pdfDataUrl ? `url(${pdfDataUrl})` : "none",
                 backgroundSize: "cover",
                 backgroundPosition: "center",
+                border: "1px solid #e5e7eb",
               }}
             >
               {/* Overlay fields according to config */}
-              {data.template.fields_config.map((field: any, index: number) => {
-                const value = dataMap[field.type] || "";
+              {template.fields_config?.map((field: any, index: number) => {
+                const value = dataMap[field.type] || field.placeholder || "";
                 return (
                   <div
                     key={index}
@@ -120,6 +186,7 @@ export default function CertificatePreview({
                           : field.textAlign === "right"
                             ? "flex-end"
                             : "flex-start",
+                      padding: "4px",
                     }}
                   >
                     {value}
@@ -149,6 +216,7 @@ function DefaultCertificatePreview({ data }: { data: any }) {
         position: "relative",
         transform: "scale(0.8)",
         transformOrigin: "top center",
+        border: "1px solid #e5e7eb",
       }}
     >
       <div
@@ -162,179 +230,30 @@ function DefaultCertificatePreview({ data }: { data: any }) {
           background: "linear-gradient(135deg, #f8faff 0%, #ffffff 100%)",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            top: "10px",
-            left: "10px",
-            right: "10px",
-            bottom: "10px",
-            border: "1px solid #93c5fd",
-          }}
-        />
-
         <div style={{ textAlign: "center", padding: "40px 60px 20px" }}>
-          <div
-            style={{
-              width: "80px",
-              height: "80px",
-              margin: "0 auto 15px",
-              background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "white",
-              fontSize: "36px",
-              fontWeight: "bold",
-            }}
-          >
-            RC
-          </div>
           <h1
             style={{
-              fontFamily: "'Playfair Display', serif",
               fontSize: "36px",
               fontWeight: 700,
               color: "#1e3a8a",
-              letterSpacing: "2px",
-              marginBottom: "5px",
+              marginBottom: "20px",
             }}
           >
             CERTIFICATE OF COMPLETION
           </h1>
-          <h2
-            style={{
-              fontSize: "28px",
-              fontWeight: 700,
-              color: "#2563eb",
-              marginBottom: "20px",
-            }}
-          >
-            GIẤY CHỨNG NHẬN
-          </h2>
-        </div>
-
-        <div style={{ textAlign: "center", padding: "20px 60px" }}>
-          <p
-            style={{
-              fontSize: "16px",
-              color: "#64748b",
-              marginBottom: "10px",
-              fontStyle: "italic",
-            }}
-          >
-            This Certificate is Presented to / Trao tặng
-          </p>
           <h3
             style={{
-              fontFamily: "'Playfair Display', serif",
               fontSize: "48px",
               fontWeight: 700,
               color: "#1e293b",
-              margin: "15px 0 20px",
-              paddingBottom: "10px",
-              borderBottom: "2px solid #2563eb",
-              display: "inline-block",
-              minWidth: "400px",
+              margin: "15px 0",
             }}
           >
             {data.athleteName}
           </h3>
           <p style={{ fontSize: "18px", color: "#64748b", marginTop: "15px" }}>
-            Event / Giải:{" "}
-            <strong style={{ color: "#1e293b" }}>{data.eventName}</strong>
+            Event: <strong>{data.eventName}</strong>
           </p>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: "40px",
-            padding: "30px 60px",
-          }}
-        >
-          <div
-            style={{
-              textAlign: "center",
-              padding: "20px 30px",
-              background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
-              borderRadius: "12px",
-              border: "2px solid #bfdbfe",
-              minWidth: "200px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#64748b",
-                marginBottom: "8px",
-              }}
-            >
-              ACTIVE DAYS
-            </div>
-            <div
-              style={{ fontSize: "32px", fontWeight: 700, color: "#2563eb" }}
-            >
-              {data.activeDays}
-            </div>
-            <div
-              style={{ fontSize: "16px", color: "#64748b", marginTop: "5px" }}
-            >
-              {data.activeDays}/{data.totalDays} ngày
-            </div>
-          </div>
-          <div
-            style={{
-              textAlign: "center",
-              padding: "20px 30px",
-              background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
-              borderRadius: "12px",
-              border: "2px solid #bfdbfe",
-              minWidth: "200px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#64748b",
-                marginBottom: "8px",
-              }}
-            >
-              DISTANCE
-            </div>
-            <div
-              style={{ fontSize: "32px", fontWeight: 700, color: "#2563eb" }}
-            >
-              {data.totalDistance.toFixed(1)} KM
-            </div>
-          </div>
-          <div
-            style={{
-              textAlign: "center",
-              padding: "20px 30px",
-              background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
-              borderRadius: "12px",
-              border: "2px solid #bfdbfe",
-              minWidth: "200px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#64748b",
-                marginBottom: "8px",
-              }}
-            >
-              PACE
-            </div>
-            <div
-              style={{ fontSize: "32px", fontWeight: 700, color: "#2563eb" }}
-            >
-              {data.averagePace}
-            </div>
-          </div>
         </div>
       </div>
     </div>

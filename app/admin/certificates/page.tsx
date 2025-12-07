@@ -1,6 +1,4 @@
-// =====================================================
-// FILE 2: app/admin/certificates/page.tsx - ADD TEMPLATE SELECTOR
-// =====================================================
+// app/admin/certificates/page.tsx - FIXED VERSION
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,6 +8,7 @@ import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 import CertificatePreview from "@/components/CertificatePreview";
 import Link from "next/link";
+
 type Event = {
   id: string;
   name: string;
@@ -42,12 +41,12 @@ type Template = {
 export default function AdminCertificatesPage() {
   const supabase = createSupabaseClient();
   const [events, setEvents] = useState<Event[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]); // ADDED
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [selectedEventData, setSelectedEventData] = useState<Event | null>(
     null
   );
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null); // ADDED
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -55,7 +54,7 @@ export default function AdminCertificatesPage() {
 
   useEffect(() => {
     loadEvents();
-    loadTemplates(); // ADDED
+    loadTemplates();
   }, []);
 
   const loadEvents = async () => {
@@ -94,7 +93,6 @@ export default function AdminCertificatesPage() {
     }
   };
 
-  // ADDED: Load templates
   const loadTemplates = async () => {
     try {
       const { data, error } = await supabase
@@ -107,7 +105,7 @@ export default function AdminCertificatesPage() {
 
       setTemplates(data || []);
       if (data && data.length > 0) {
-        setSelectedTemplate(data[0].id); // Auto-select first template
+        setSelectedTemplate(data[0].id);
       }
     } catch (error) {
       console.error("Error loading templates:", error);
@@ -206,10 +204,10 @@ export default function AdminCertificatesPage() {
         "MMMM dd, yyyy",
         { locale: vi }
       ),
+      templateId: selectedTemplate, // ADDED: Pass template ID
     });
   };
 
-  // UPDATED: Pass template_id
   const handleGenerateAll = async () => {
     if (!selectedEvent || !selectedTemplate) {
       alert("Vui lòng chọn sự kiện và template!");
@@ -227,7 +225,7 @@ export default function AdminCertificatesPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ template_id: selectedTemplate }), // ADDED
+          body: JSON.stringify({ template_id: selectedTemplate }),
         }
       );
 
@@ -256,6 +254,7 @@ export default function AdminCertificatesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -267,7 +266,6 @@ export default function AdminCertificatesPage() {
           </p>
         </div>
 
-        {/* ADDED: Link to Templates Manager */}
         <Link
           href="/admin/certificates/templates"
           className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -325,7 +323,7 @@ export default function AdminCertificatesPage() {
         )}
       </div>
 
-      {/* ADDED: Template Selection */}
+      {/* Template Selection */}
       {selectedEvent && templates.length > 0 && (
         <div className="bg-white rounded-xl shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">
@@ -505,7 +503,8 @@ export default function AdminCertificatesPage() {
                       <td className="px-6 py-4">
                         <button
                           onClick={() => handlePreview(participant)}
-                          className="flex items-center space-x-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg text-sm"
+                          disabled={!selectedTemplate}
+                          className="flex items-center space-x-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Eye className="h-4 w-4" />
                           <span>Xem trước</span>
@@ -524,6 +523,7 @@ export default function AdminCertificatesPage() {
       {previewData && (
         <CertificatePreview
           data={previewData}
+          templateId={previewData.templateId}
           onClose={() => setPreviewData(null)}
         />
       )}

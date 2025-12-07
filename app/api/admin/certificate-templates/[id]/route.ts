@@ -1,14 +1,12 @@
-// =====================================================
-// FILE: app/api/admin/certificate-templates/[id]/route.ts
-// API routes for specific template operations
-// =====================================================
+// app/api/admin/certificate-templates/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { cookies } from "next/headers";
+
 /**
  * GET - Get single template by ID
  */
-export async function GET_SINGLE(
+export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -191,6 +189,3 @@ export async function DELETE(
     );
   }
 }
-
-// Export with proper Next.js names
-export { GET_SINGLE as GET, PUT, DELETE };
