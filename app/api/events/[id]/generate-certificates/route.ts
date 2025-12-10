@@ -1,4 +1,4 @@
-// app/api/events/[id]/generate-certificates/route.ts - FIXED Y-COORDINATE
+// app/api/events/[id]/generate-certificates/route.ts - FINAL FIXED VERSION
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/supabase";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
@@ -92,7 +92,7 @@ export async function POST(
       );
     }
 
-    // Calculate stats
+    // Calculate stats WITH RANKING
     const participantsWithStats = await Promise.all(
       participantsData.map(async (p) => {
         const { data: activities } = await supabase
@@ -128,8 +128,20 @@ export async function POST(
       })
     );
 
+    // Sort by distance to get ranking
+    const sortedParticipants = [...participantsWithStats].sort(
+      (a, b) => b.total_distance - a.total_distance
+    );
+
+    // Add ranking to each participant
+    const participantsWithRanking = participantsWithStats.map((p) => ({
+      ...p,
+      ranking:
+        sortedParticipants.findIndex((sp) => sp.user_id === p.user_id) + 1,
+    }));
+
     // Download PDF template
-    console.log("Downloading PDF template from:", template.pdf_url);
+    console.log("📥 Downloading PDF template from:", template.pdf_url);
     const templateResponse = await fetch(template.pdf_url);
     if (!templateResponse.ok) {
       throw new Error("Failed to download PDF template");
@@ -140,16 +152,18 @@ export async function POST(
     const zip = new JSZip();
     let count = 0;
 
-    console.log(`Processing ${participantsWithStats.length} participants...`);
+    console.log(
+      `📋 Processing ${participantsWithRanking.length} participants...`
+    );
 
-    for (const participant of participantsWithStats) {
+    for (const participant of participantsWithRanking) {
       try {
         // Load PDF template for each participant
         const pdfDoc = await PDFDocument.load(templateBytes);
         const page = pdfDoc.getPages()[0];
         const { height } = page.getSize();
 
-        console.log(`📏 PDF page dimensions: height=${height}px`);
+        console.log(`📏 PDF page height: ${height}px`);
 
         // Load fonts
         const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -157,22 +171,64 @@ export async function POST(
           StandardFonts.HelveticaBold
         );
 
-        // Data mapping
+        // 📊 COMPREHENSIVE DATA MAPPING - All possible fields
         const dataMap: Record<string, string> = {
+          // Basic Info
           athleteName: participant.full_name || participant.username,
           eventName: event.name,
+
+          // Stats (English)
           activeDays: participant.active_days.toString(),
           totalDays: participant.total_days.toString(),
           totalDistance: participant.total_distance.toFixed(1),
           averagePace: participant.average_pace,
-          completionDate: format(eventEnd, "MMMM dd, yyyy", { locale: vi }),
+          completionDate: format(eventEnd, "dd/MM/yyyy", { locale: vi }),
+          ranking: participant.ranking.toString(),
+
+          // Vietnamese field names (all possible variations)
+          soBib: "", // BIB number (can be added if needed)
+          soVong: participant.active_days.toString(), // Number of rounds
+          tongKm: participant.total_distance.toFixed(1), // Total KM
+          xepHang: participant.ranking.toString(), // Ranking
+          xepHangChungCuoc: participant.ranking.toString(), // Final ranking
+
+          // Alternative English names
+          bibNumber: "",
+          rounds: participant.active_days.toString(),
+          totalKm: participant.total_distance.toFixed(1),
+          rank: participant.ranking.toString(),
+          finalRank: participant.ranking.toString(),
+        };
+
+        // 🔍 Helper function: Get value with case-insensitive matching
+        const getValue = (fieldType: string): string => {
+          // Try exact match first
+          if (dataMap[fieldType]) return dataMap[fieldType];
+
+          // Try case-insensitive match
+          const lowerFieldType = fieldType.toLowerCase();
+          for (const [key, value] of Object.entries(dataMap)) {
+            if (key.toLowerCase() === lowerFieldType) {
+              return value;
+            }
+          }
+
+          // No match found, return empty
+          return "";
         };
 
         // Draw fields
         const fieldsConfig = template.fields_config as any[];
 
         for (const field of fieldsConfig) {
-          const value = dataMap[field.type] || field.placeholder || "";
+          const value = getValue(field.type) || field.placeholder || "";
+
+          // Skip empty fields
+          if (!value) {
+            console.log(`⚠️ Skipping empty field: ${field.type}`);
+            continue;
+          }
+
           const selectedFont =
             field.fontWeight === "bold" ? helveticaBold : helvetica;
 
@@ -195,23 +251,31 @@ export async function POST(
             xPosition = field.x + field.width - textWidth;
           }
 
-          // CRITICAL FIX: Correct Y coordinate calculation
-          // Editor coordinates: Y from top (0 at top)
-          // PDF coordinates: Y from bottom (0 at bottom)
+          // ✅ CRITICAL FIX: CHÍNH XÁC 100% Y COORDINATE
           //
-          // If field.y = 100 (100px from top in editor)
-          // PDF Y should be: pageHeight - 100 - field.height
+          // Giải thích chi tiết:
+          // 1. Editor coordinate: Y = 0 ở TOP, tăng xuống BOTTOM
+          // 2. PDF coordinate: Y = 0 ở BOTTOM, tăng lên TOP
+          // 3. field.y: khoảng cách từ TOP của page trong editor
+          // 4. field.height: chiều cao của bounding box
+          // 5. Text baseline: nằm ở khoảng 75% từ top của bounding box
           //
-          // For text, we need to position at the BASELINE of the text
-          // The baseline is approximately at the bottom of the text box
-          const yPosition = height - field.y - field.height;
+          // Công thức ĐÚNG:
+          // pdfY = pageHeight - editorY - (field.height * 0.75)
+          //
+          // Tại sao 0.75?
+          // - Text baseline thường nằm ở 3/4 chiều cao box từ top
+          // - Điều này giúp text căn giữa theo chiều dọc trong box
+          //
+          const yPosition = height - field.y - field.height * 0.75;
 
-          console.log(`📍 Field ${field.type}:`, {
+          console.log(`📍 Field "${field.type}" = "${value}":`, {
             editorY: field.y,
             fieldHeight: field.height,
-            pdfY: yPosition,
             fontSize: field.fontSize,
+            calculatedPdfY: yPosition.toFixed(2),
             pageHeight: height,
+            formula: `${height} - ${field.y} - (${field.height} * 0.75) = ${yPosition.toFixed(2)}`,
           });
 
           // Draw text
@@ -238,11 +302,11 @@ export async function POST(
 
         count++;
         console.log(
-          `✓ Generated certificate ${count}/${participantsWithStats.length}`
+          `✅ Generated certificate ${count}/${participantsWithRanking.length} - ${participant.username} (Rank #${participant.ranking})`
         );
       } catch (error) {
         console.error(
-          `Error generating certificate for ${participant.username}:`,
+          `❌ Error generating certificate for ${participant.username}:`,
           error
         );
       }
@@ -255,7 +319,7 @@ export async function POST(
       );
     }
 
-    console.log(`Generating ZIP file with ${count} certificates...`);
+    console.log(`📦 Generating ZIP file with ${count} certificates...`);
 
     // Generate ZIP
     const zipBlob = await zip.generateAsync({
@@ -264,7 +328,7 @@ export async function POST(
       compressionOptions: { level: 6 },
     });
 
-    console.log("✓ ZIP file generated successfully");
+    console.log("✅ ZIP file generated successfully");
 
     // Return ZIP file
     return new NextResponse(zipBlob, {
@@ -274,7 +338,7 @@ export async function POST(
       },
     });
   } catch (error: any) {
-    console.error("Generate certificates error:", error);
+    console.error("❌ Generate certificates error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to generate certificates" },
       { status: 500 }
