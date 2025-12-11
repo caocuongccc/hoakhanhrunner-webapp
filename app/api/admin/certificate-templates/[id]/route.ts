@@ -8,10 +8,11 @@ import { cookies } from "next/headers";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  // { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const id = (await context.params).id;
 
     const { data, error } = await supabase
       .from("certificate_templates")
@@ -47,10 +48,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const id = (await context.params).id;
 
     // Check admin authentication
     const cookieStore = cookies();
@@ -125,10 +126,10 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const id = (await context.params).id;
 
     // Check admin authentication
     const cookieStore = cookies();

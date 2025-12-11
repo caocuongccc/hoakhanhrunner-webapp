@@ -111,10 +111,11 @@ async function fillPdfTemplate(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  // { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const eventId = params.id;
+    const eventId = (await context.params).id;
     const body = await request.json();
     const { templateId } = body;
 
