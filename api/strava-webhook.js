@@ -1,6 +1,4 @@
-// api/strava-webhook.js - FIXED VERSION WITH STATS UPDATE
-// const { createClient } = require("@supabase/supabase-js");
-import { createClient } from "@supabase/supabase-js";
+const { createClient } = require("@supabase/supabase-js");
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -75,14 +73,10 @@ async function fetchStravaActivity(activityId, accessToken) {
   return response.json();
 }
 
-/**
- * Save best efforts - ONLY KEEP FASTEST TIME
- */
 async function saveBestEfforts(userId, activityId, bestEfforts) {
   if (!bestEfforts || bestEfforts.length === 0) return;
 
   for (const effort of bestEfforts) {
-    // Check existing PR
     const { data: existingPR } = await supabase
       .from("best_efforts")
       .select("*")
@@ -92,7 +86,6 @@ async function saveBestEfforts(userId, activityId, bestEfforts) {
       .limit(1)
       .single();
 
-    // If new time is faster, replace
     if (!existingPR || effort.elapsed_time < existingPR.elapsed_time) {
       if (existingPR) {
         await supabase
@@ -119,9 +112,6 @@ async function saveBestEfforts(userId, activityId, bestEfforts) {
   }
 }
 
-/**
- * Update participant stats - FIXED
- */
 async function updateParticipantStats(eventId, userId) {
   try {
     const { data: activities } = await supabase
@@ -155,7 +145,6 @@ async function updateParticipantStats(eventId, userId) {
       return;
     }
 
-    // Also update team stats if user is in a team
     const { data: participant } = await supabase
       .from("event_participants")
       .select("team_id")
@@ -215,7 +204,6 @@ async function syncToEventActivities(userId, activity) {
       return;
     }
 
-    // Save best efforts first
     if (activity.best_efforts && activity.best_efforts.length > 0) {
       await saveBestEfforts(userId, activity.id, activity.best_efforts);
     }
@@ -273,7 +261,6 @@ async function syncToEventActivities(userId, activity) {
           ]);
         }
 
-        // IMPORTANT: Update participant stats
         await updateParticipantStats(eventId, userId);
         console.log(`✅ Synced to event ${eventId} (${event.name})`);
       }
@@ -283,8 +270,7 @@ async function syncToEventActivities(userId, activity) {
   }
 }
 
-// module.exports = async function handler(req, res) {
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   console.log("🔥 Webhook:", req.method);
 
   if (req.method === "GET") {
@@ -358,7 +344,7 @@ export default async function handler(req, res) {
           const activity = await fetchStravaActivity(object_id, accessToken);
 
           if (activity.sport_type !== "Run" && activity.type !== "Run") {
-            console.log("⏭️ Skip non-run");
+            console.log("⭐️ Skip non-run");
             await supabase
               .from("strava_webhook_events")
               .update({
@@ -453,4 +439,4 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).send("Method Not Allowed");
-}
+};
