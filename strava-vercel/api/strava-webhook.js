@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   {
     auth: {
       autoRefreshToken: false,
@@ -12,7 +12,6 @@ const supabase = createClient(
     },
   }
 );
-
 async function refreshStravaToken(refreshToken) {
   const response = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
