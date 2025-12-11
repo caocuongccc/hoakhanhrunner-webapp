@@ -1,5 +1,6 @@
 // api/strava-webhook.js - FIXED VERSION WITH STATS UPDATE
-const { createClient } = require("@supabase/supabase-js");
+// const { createClient } = require("@supabase/supabase-js");
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -282,7 +283,8 @@ async function syncToEventActivities(userId, activity) {
   }
 }
 
-module.exports = async function handler(req, res) {
+// module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   console.log("🔥 Webhook:", req.method);
 
   if (req.method === "GET") {
@@ -451,4 +453,4 @@ module.exports = async function handler(req, res) {
   }
 
   return res.status(405).send("Method Not Allowed");
-};
+}
