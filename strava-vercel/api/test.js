@@ -1,3 +1,3 @@
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.status(200).json({ message: "Test works!" });
-};
+}
