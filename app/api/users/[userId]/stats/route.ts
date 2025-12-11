@@ -9,10 +9,10 @@ import { supabase } from "@/lib/supabase";
 export async function GET(
   request: NextRequest,
   // { params }: { params: { userId: string } }
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const userId = (await context.params).id;
+    const userId = (await context.params).userId;
     const { searchParams } = request.nextUrl;
     const period = searchParams.get("period") || "all_time"; // all_time, this_year, this_month
 
