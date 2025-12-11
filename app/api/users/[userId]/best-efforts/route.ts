@@ -9,10 +9,10 @@ import { supabase } from "@/lib/supabase";
 export async function GET(
   request: NextRequest,
   // { params }: { params: { userId: string } }
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const userId = (await context.params).id;
+    const userId = (await context.params).userId;
 
     // Get PRs using database function
     const { data: prs, error } = await supabase.rpc("get_user_prs", {
