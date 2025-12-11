@@ -41,6 +41,7 @@ export default function CertificateTemplatesPage() {
     startY: 0,
     field: null,
   });
+  const renderTaskRef = useRef<any>(null);
 
   useEffect(() => {
     loadTemplates();
@@ -53,6 +54,18 @@ export default function CertificateTemplatesPage() {
       renderPdfToCanvas(pdfFile);
     }
   }, [pdfFile, canvasRef.current]);
+
+  // ✅ Thêm cleanup khi component unmount
+  useEffect(() => {
+    return () => {
+      // Cancel any pending render task when component unmounts
+      if (renderTaskRef.current) {
+        console.log("🧹 Cleaning up render task on unmount");
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+      }
+    };
+  }, []);
 
   const loadFieldTypes = async () => {
     try {
@@ -86,8 +99,114 @@ export default function CertificateTemplatesPage() {
     }
   };
 
+  // const renderPdfToCanvas = async (file: File) => {
+  //   try {
+  //     setPdfLoading(true);
+  //     setPdfDataUrl(""); // Clear old data
+  //     console.log("📄 Starting PDF render...", file.name);
+
+  //     // Check if canvas exists
+  //     const canvas = canvasRef.current;
+  //     if (!canvas) {
+  //       console.error("❌ Canvas element not found!");
+  //       throw new Error("Canvas element not found. Please try again.");
+  //     }
+
+  //     console.log("✅ Canvas element found:", canvas);
+
+  //     // Check PDF.js
+  //     const pdfjsLib = (window as any).pdfjsLib;
+  //     if (!pdfjsLib) {
+  //       throw new Error("PDF.js library not loaded. Please refresh the page.");
+  //     }
+
+  //     console.log("✅ PDF.js loaded");
+
+  //     // Set worker
+  //     pdfjsLib.GlobalWorkerOptions.workerSrc =
+  //       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  //     // Load PDF
+  //     const arrayBuffer = await file.arrayBuffer();
+  //     console.log("✅ File read, size:", arrayBuffer.byteLength, "bytes");
+
+  //     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  //     const pdf = await loadingTask.promise;
+
+  //     console.log("✅ PDF loaded, pages:", pdf.numPages);
+
+  //     // Get first page
+  //     const page = await pdf.getPage(1);
+  //     console.log("✅ Page 1 loaded");
+
+  //     // Get canvas context
+  //     const context = canvas.getContext("2d");
+  //     if (!context) {
+  //       throw new Error("Cannot get canvas 2D context");
+  //     }
+
+  //     console.log("✅ Canvas context ready");
+
+  //     // Calculate size
+  //     const desiredWidth = 1000;
+  //     const viewport = page.getViewport({ scale: 1 });
+  //     const renderScale = desiredWidth / viewport.width;
+  //     const scaledViewport = page.getViewport({ scale: renderScale });
+
+  //     // Set canvas size
+  //     canvas.width = scaledViewport.width;
+  //     canvas.height = scaledViewport.height;
+
+  //     console.log("📏 Canvas dimensions:", {
+  //       width: canvas.width,
+  //       height: canvas.height,
+  //       scale: renderScale,
+  //     });
+
+  //     // Save canvas size for field positioning
+  //     setCanvasSize({
+  //       width: canvas.width,
+  //       height: canvas.height,
+  //     });
+
+  //     // Render PDF to canvas
+  //     console.log("🎨 Rendering PDF to canvas...");
+  //     await page.render({
+  //       canvasContext: context,
+  //       viewport: scaledViewport,
+  //     }).promise;
+
+  //     console.log("✅ PDF rendered to canvas");
+
+  //     // Convert to data URL
+  //     const dataUrl = canvas.toDataURL("image/png");
+  //     setPdfDataUrl(dataUrl);
+
+  //     console.log(
+  //       "✅ PDF conversion complete, dataURL length:",
+  //       dataUrl.length
+  //     );
+  //     setPdfLoading(false);
+  //   } catch (error: any) {
+  //     console.error("❌ PDF Render Error:", error);
+  //     alert(
+  //       `Không thể hiển thị PDF:\n\n${error.message}\n\nVui lòng thử:\n1. Chọn file PDF khác\n2. Refresh trang\n3. Kiểm tra file PDF có hợp lệ không`
+  //     );
+  //     setPdfLoading(false);
+  //     setPdfDataUrl("");
+  //   }
+  // };
   const renderPdfToCanvas = async (file: File) => {
     try {
+      // ✅ Cancel any existing render task first
+      if (renderTaskRef.current) {
+        console.log("🛑 Cancelling previous render task...");
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+        // Wait a bit for cancellation to complete
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
       setPdfLoading(true);
       setPdfDataUrl(""); // Clear old data
       console.log("📄 Starting PDF render...", file.name);
@@ -132,7 +251,9 @@ export default function CertificateTemplatesPage() {
         throw new Error("Cannot get canvas 2D context");
       }
 
-      console.log("✅ Canvas context ready");
+      // ✅ Clear canvas before rendering
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      console.log("✅ Canvas cleared");
 
       // Calculate size
       const desiredWidth = 1000;
@@ -144,7 +265,7 @@ export default function CertificateTemplatesPage() {
       canvas.width = scaledViewport.width;
       canvas.height = scaledViewport.height;
 
-      console.log("📏 Canvas dimensions:", {
+      console.log("📐 Canvas dimensions:", {
         width: canvas.width,
         height: canvas.height,
         scale: renderScale,
@@ -156,12 +277,21 @@ export default function CertificateTemplatesPage() {
         height: canvas.height,
       });
 
-      // Render PDF to canvas
+      // ✅ Create render task and save reference
       console.log("🎨 Rendering PDF to canvas...");
-      await page.render({
+      const renderTask = page.render({
         canvasContext: context,
         viewport: scaledViewport,
-      }).promise;
+      });
+
+      // Save render task to ref so we can cancel it later
+      renderTaskRef.current = renderTask;
+
+      // Wait for render to complete
+      await renderTask.promise;
+
+      // Clear the ref after successful render
+      renderTaskRef.current = null;
 
       console.log("✅ PDF rendered to canvas");
 
@@ -175,6 +305,17 @@ export default function CertificateTemplatesPage() {
       );
       setPdfLoading(false);
     } catch (error: any) {
+      // Clear render task ref on error
+      renderTaskRef.current = null;
+
+      // ✅ Handle cancellation gracefully (not an error)
+      if (error.name === "RenderingCancelledException") {
+        console.log(
+          "ℹ️ Render was cancelled (this is normal when switching files)"
+        );
+        return; // Don't show error to user
+      }
+
       console.error("❌ PDF Render Error:", error);
       alert(
         `Không thể hiển thị PDF:\n\n${error.message}\n\nVui lòng thử:\n1. Chọn file PDF khác\n2. Refresh trang\n3. Kiểm tra file PDF có hợp lệ không`
@@ -193,15 +334,24 @@ export default function CertificateTemplatesPage() {
       return;
     }
 
-    console.log("📁 File selected:", file.name, file.size, "bytes");
+    console.log("📂 File selected:", file.name, file.size, "bytes");
 
+    // ✅ Cancel any existing render first
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
+    }
+
+    // Clear old state
+    setPdfDataUrl("");
+    setFields([]);
+    setSelectedField(null);
+
+    // Set new file
     setPdfFile(file);
     const url = URL.createObjectURL(file);
     setPdfPreviewUrl(url);
     setIsEditing(true);
-    setFields([]);
-    setSelectedField(null);
-    setPdfDataUrl("");
   };
 
   const handleAddField = (fieldType: any) => {

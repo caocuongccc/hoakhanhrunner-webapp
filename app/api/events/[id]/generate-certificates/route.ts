@@ -250,7 +250,9 @@ export async function POST(
           } else if (field.textAlign === "right") {
             xPosition = field.x + field.width - textWidth;
           }
-
+          console.log(
+            `🎯 Field "${field.type}" alignment: ${field.textAlign}, X position: ${xPosition.toFixed(2)}`
+          );
           // ✅ CRITICAL FIX: CHÍNH XÁC 100% Y COORDINATE
           //
           // Giải thích chi tiết:
@@ -267,15 +269,22 @@ export async function POST(
           // - Text baseline thường nằm ở 3/4 chiều cao box từ top
           // - Điều này giúp text căn giữa theo chiều dọc trong box
           //
-          const yPosition = height - field.y - field.height * 0.75;
+          // const yPosition = height - field.y - field.height * 0.75;
+          //const yPosition = height - field.y - field.fontSize;
+          const yPosition =
+            height - field.y - field.height / 2 - field.fontSize * 0.35 + 40;
 
           console.log(`📍 Field "${field.type}" = "${value}":`, {
+            editorX: field.x,
             editorY: field.y,
+            fieldWidth: field.width,
             fieldHeight: field.height,
             fontSize: field.fontSize,
+            textAlign: field.textAlign,
+            calculatedPdfX: xPosition.toFixed(2),
             calculatedPdfY: yPosition.toFixed(2),
             pageHeight: height,
-            formula: `${height} - ${field.y} - (${field.height} * 0.75) = ${yPosition.toFixed(2)}`,
+            adjustments: "Y+35px",
           });
 
           // Draw text
