@@ -186,7 +186,7 @@ export async function POST(
           ranking: participant.ranking.toString(),
 
           // Vietnamese field names (all possible variations)
-          soBib: "", // BIB number (can be added if needed)
+          soBib: "", //
           soVong: participant.active_days.toString(), // Number of rounds
           tongKm: participant.total_distance.toFixed(1), // Total KM
           xepHang: participant.ranking.toString(), // Ranking
