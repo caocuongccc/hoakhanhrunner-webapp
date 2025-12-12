@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Check admin authentication
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const adminToken = cookieStore.get("admin_token")?.value;
 
     if (!adminToken) {

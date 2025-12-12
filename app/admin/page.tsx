@@ -1,8 +1,10 @@
+// app/admin/page.tsx - CẬP NHẬT với WebhookStatusChecker
 "use client";
 
 import { useEffect, useState } from "react";
 import { Calendar, Users, Activity, TrendingUp } from "lucide-react";
 import { createSupabaseClient } from "@/lib/supabase";
+import WebhookStatusChecker from "@/components/WebhookStatusChecker";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -96,6 +98,9 @@ export default function AdminDashboard() {
           loading={loading}
         />
       </div>
+
+      {/* ✅ WEBHOOK STATUS CHECKER - THÊM MỚI */}
+      <WebhookStatusChecker />
 
       {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-md p-6">

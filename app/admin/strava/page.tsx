@@ -191,9 +191,7 @@ export default function AdminStravaPage() {
               <div className="flex justify-between">
                 <span className="text-gray-600">Created:</span>
                 <span>
-                  {new Date(webhookStatus.created_at * 1000).toLocaleString(
-                    "vi-VN"
-                  )}
+                  {new Date(webhookStatus.created_at).toLocaleString("vi-VN")}
                 </span>
               </div>
             </div>

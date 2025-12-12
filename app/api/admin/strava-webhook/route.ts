@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/strava/webhook`;
+    const callbackUrl = process.env.NEXT_PUBLIC_STRAVA_WEBHOOK_URI;
     const verifyToken = process.env.STRAVA_WEBHOOK_VERIFY_TOKEN!;
 
     const subscription = await subscribeToStravaWebhook(

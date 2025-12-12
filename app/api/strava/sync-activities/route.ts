@@ -162,7 +162,7 @@ async function syncToEventActivities(userId: string, activity: any) {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const userId = cookieStore.get("user_id")?.value;
 
     if (!userId) {

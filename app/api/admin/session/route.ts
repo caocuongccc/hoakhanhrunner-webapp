@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = cookieStore.get("admin_token")?.value;
 
     console.log("Checking admin session, token:", token ? "exists" : "null");

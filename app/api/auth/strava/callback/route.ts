@@ -374,7 +374,7 @@ export async function GET(request: NextRequest) {
       userId = newUser.id;
     }
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     cookieStore.set("user_id", userId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

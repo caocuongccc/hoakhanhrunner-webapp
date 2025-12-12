@@ -54,7 +54,7 @@ export async function PUT(
     const id = (await context.params).id;
 
     // Check admin authentication
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const adminToken = cookieStore.get("admin_token")?.value;
 
     if (!adminToken) {
@@ -132,7 +132,7 @@ export async function DELETE(
     const id = (await context.params).id;
 
     // Check admin authentication
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const adminToken = cookieStore.get("admin_token")?.value;
 
     if (!adminToken) {
