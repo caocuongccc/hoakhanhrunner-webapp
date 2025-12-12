@@ -42,7 +42,7 @@ export default function HomePage() {
       <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl p-8 md:p-12">
         <div className="max-w-3xl">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            Chào mừng đến với Running Club
+            Chào mừng đến với Hòa Khánh Runners!
           </h1>
           <p className="text-xl md:text-2xl mb-8 text-blue-100">
             Cộng đồng chạy bộ nhiệt huyết - Kết nối, thi đấu và vượt qua giới
@@ -57,7 +57,7 @@ export default function HomePage() {
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
             <Link
-              href="/register"
+              href="/"
               className="inline-flex items-center px-6 py-3 bg-blue-700 text-white font-semibold rounded-lg hover:bg-blue-800 transition-colors border-2 border-white"
             >
               Tham gia ngay

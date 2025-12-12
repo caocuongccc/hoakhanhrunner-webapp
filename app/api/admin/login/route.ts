@@ -8,15 +8,13 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
 
-    console.log("Admin login attempt:", email);
-
     if (!email || !password) {
       return NextResponse.json(
         { error: "Email và mật khẩu là bắt buộc" },
         { status: 400 }
       );
     }
-
+    console.log("Admin login attempt:", email);
     // Get admin by email
     const { data: admin, error: adminError } = await supabase
       .from("admins")
