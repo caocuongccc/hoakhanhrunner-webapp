@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const adminData = {
   email: "admin@runningclub.local",
   username: "admin",
-  password: "admin123", // ĐỔI MẬT KHẨU NÀY!
+  password: "1234567890", // ĐỔI MẬT KHẨU NÀY!
   full_name: "Administrator",
   role: "super_admin",
 };
