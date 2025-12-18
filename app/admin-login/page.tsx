@@ -91,7 +91,6 @@ export default function AdminLoginPage() {
               <span className="text-sm">{error}</span>
             </div>
           )}
-
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
             <div>
@@ -164,7 +163,6 @@ export default function AdminLoginPage() {
               )}
             </button>
           </form>
-
           {/* Info */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
@@ -174,17 +172,6 @@ export default function AdminLoginPage() {
                 đăng nhập qua Strava
               </a>
               .
-            </p>
-          </div>
-
-          {/* Test Account Info */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <p className="text-xs text-gray-600 font-mono">
-              <strong>Test Account:</strong>
-              <br />
-              Email: admin@runningclub.local
-              <br />
-              Password: Admin@123
             </p>
           </div>
         </div>
