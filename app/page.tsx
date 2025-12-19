@@ -24,6 +24,8 @@ export default function HomePage() {
         .from("events")
         .select("*")
         .gte("end_date", today)
+        // .filter("status", "active")
+        .eq("status", "active")
         .order("start_date", { ascending: true })
         .limit(6);
 
