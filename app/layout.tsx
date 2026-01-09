@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Navigation from "@/components/Navigation";
 import AuthProvider from "@/components/AuthProvider";
+import { Toaster } from "react-hot-toast";
 
 const inter = Inter({ subsets: ["latin", "vietnamese"] });
 
@@ -23,7 +24,19 @@ export default function RootLayout({
         <AuthProvider>
           <div className="min-h-screen bg-gray-50">
             <Navigation />
-            <main className="container mx-auto px-4 py-8">{children}</main>
+            <main className="container mx-auto px-4 py-8">
+              {children}
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  duration: 2500,
+                  style: {
+                    fontSize: "16px",
+                    borderRadius: "12px",
+                  },
+                }}
+              />
+            </main>
           </div>
         </AuthProvider>
       </body>

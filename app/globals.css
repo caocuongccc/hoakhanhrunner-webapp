@@ -18,7 +18,16 @@ body {
     )
     rgb(var(--background-start-rgb));
 }
-
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-25px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 @layer utilities {
   .text-balance {
     text-wrap: balance;
