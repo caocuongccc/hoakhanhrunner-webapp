@@ -41,7 +41,7 @@ export default function Navigation() {
           <Link href="/" className="flex items-center space-x-2">
             <Activity className="h-8 w-8 text-blue-600" />
             <span className="text-xl font-bold text-gray-900">
-              Running Club
+              Hòa Khánh Runners
             </span>
           </Link>
 

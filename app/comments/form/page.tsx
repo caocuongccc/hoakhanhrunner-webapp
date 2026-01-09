@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Send, MessageSquare } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import toast from "react-hot-toast";
+import { support } from "jszip";
 
 export default function CommentsFormPage() {
   const [formData, setFormData] = useState({
@@ -19,10 +20,33 @@ export default function CommentsFormPage() {
     "PR hụt nhưng vui 😅",
     "Chạy không pace 📉",
     "Đồng run huyền thoại 😎",
-    "Runner hệ ăn 😋",
+
     "Chạy xong mới nhớ 😵",
     "Người lạc nhịp 💨",
     "Anh/chị em HKR 💜",
+    "PR hụt 3 giây 😭",
+    "Chạy tạch nhưng vẫn cười 😅",
+    "Pace bay màu 💨",
+    "Sub đâu không thấy 🤡",
+    "Người về nhì… từ dưới lên",
+    "Suýt nữa thì PR 🤏",
+    "Chạy cho biết mùi đời chạy bộ 🖥️",
+    "Ngủ quên giờ chạy ⏰💤",
+    "Báo thức kêu cho vui",
+    "Runner hệ ngủ 😴",
+    "Dậy rồi lại ngủ tiếp",
+    "Chạy để ăn 🍜",
+    "Ăn rồi chạy 🥢",
+    "Hẹn buổi sau chạy bù",
+    "Chạy trong giấc mơ 🌙",
+    "Gãy bài từ km thứ 2 💀",
+    "Runner hệ ăn 😋",
+    "Chạy xong là kiếm quán",
+    "Uống nước mạnh hơn chạy",
+    "Ông vua support 👑",
+    "Người giữ trạm nước huyền thoại",
+    "Đồng run quốc dân",
+    "Tới cho đủ hình 📸",
   ];
   const getRandomName = () =>
     FUNNY_NAMES[Math.floor(Math.random() * FUNNY_NAMES.length)];

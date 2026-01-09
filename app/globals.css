@@ -18,19 +18,120 @@ body {
     )
     rgb(var(--background-start-rgb));
 }
+
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(-25px);
+    transform: translateY(-30px) scale(0.9);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+
+.animate-slideIn {
+  animation: slideIn 0.6s ease-out;
+}
+
+/* ❤️ HEART */
+.heart-float {
+  position: absolute;
+  bottom: 0;
+  font-size: 2.5rem;
+  animation: heartUp 2.5s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes heartUp {
+  0% {
+    transform: translateY(0) scale(0.5);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-140px) scale(1.4);
+    opacity: 0;
+  }
+}
+
+/* 🍻 BEER */
+.beer-float {
+  position: absolute;
+  bottom: 0;
+  font-size: 3rem;
+  animation: beerUp 2s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes beerUp {
+  0% {
+    transform: translateY(20px) scale(0.4) rotate(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-120px) scale(1.2) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* 🎆 FIREWORK */
+.firework {
+  position: absolute;
+  inset: 0;
+}
+
+.firework::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 60px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 215, 0, 0.9),
+    rgba(255, 105, 180, 0.8),
+    transparent
+  );
+  transform: translate(-50%, -50%);
+  animation: fireworkShoot 1.2s ease-out forwards;
+}
+
+@keyframes fireworkShoot {
+  to {
+    transform: translate(-50%, -140%);
+    opacity: 0;
+  }
+}
+
+/* ✨ GLOW */
+.glow-effect {
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.6),
+    rgba(236, 72, 153, 0.6),
+    rgba(139, 92, 246, 0.6)
+  );
+  animation: glowPulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes glowPulse {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.6;
   }
 }
 
