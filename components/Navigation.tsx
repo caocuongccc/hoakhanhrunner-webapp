@@ -9,7 +9,10 @@ import { useAuth } from "@/components/AuthProvider";
 export default function Navigation() {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
-
+  /* 🔥 ẨN MENU CHO COMMENTS / TV / FORM */
+  if (pathname.startsWith("/comments")) {
+    return null;
+  }
   const handleLogout = async () => {
     if (confirm("Bạn có chắc muốn đăng xuất?")) {
       await signOut();
