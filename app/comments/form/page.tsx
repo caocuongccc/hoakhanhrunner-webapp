@@ -138,7 +138,7 @@ export default function CommentsFormPage() {
                 onChange={(e) =>
                   setFormData({ ...formData, content: e.target.value })
                 }
-                rows={8}
+                rows={5}
                 className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none resize-none transition-colors"
                 placeholder="Chia sẻ những kỷ niệm đẹp, cảm xúc, hoặc mong ước của bạn về Hòa Khánh Runners trong năm qua..."
               />
