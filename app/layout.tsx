@@ -9,8 +9,9 @@ import { Toaster } from "react-hot-toast";
 const inter = Inter({ subsets: ["latin", "vietnamese"] });
 
 export const metadata: Metadata = {
-  title: "Running Club - Cộng đồng chạy bộ",
-  description: "Nền tảng quản lý sự kiện và hoạt động chạy bộ",
+  title: "Hòa Khánh Runners - Chạy để sống tốt hơn",
+  description:
+    "Nền tảng quản lý sự kiện và hoạt động chạy bộ dành cho các runner của câu lạc bộ Hòa Khánh Runners. Tạo và tham gia các sự kiện chạy bộ, theo dõi hoạt động cá nhân, kết nối với cộng đồng runner.",
 };
 
 export default function RootLayout({

@@ -24,6 +24,19 @@ const NOTIFICATION_SOUNDS = [
   "https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3", // Ding sound
 ];
 
+const TITLES = [
+  "CHUYỆN CHẠY CỦA ANH EM HKR",
+  "CHẠY XONG KỂ CHUYỆN",
+  "HKR – CHẠY LÀ CHÍNH, KỂ LÀ PHỤ",
+  "MẤY CHUYỆN SAU BUỔI CHẠY",
+  "ANH EM HKR NÓI GÌ NÈ",
+  "PACE TỤT NHƯNG TÂM SỰ TĂNG",
+  "CHẠY CHẬM NHƯNG KỂ NHIỀU",
+  "CHUYỆN ĐỜI RUNNERS HÒA KHÁNH",
+  "SAU GIỜ CHẠY, TỚI GIỜ KỂ",
+  "HKR – CHẠY CHUNG, VUI CHUNG",
+];
+
 const randomSound = () =>
   NOTIFICATION_SOUNDS[Math.floor(Math.random() * NOTIFICATION_SOUNDS.length)];
 
@@ -34,6 +47,7 @@ export default function CommentsTVPage() {
   const lastIdsRef = useRef<Set<number>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [titleIndex, setTitleIndex] = useState(0);
 
   /* Load comments */
   const loadComments = async () => {
@@ -91,6 +105,14 @@ export default function CommentsTVPage() {
   };
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      setTitleIndex((prev) => (prev + 1) % TITLES.length);
+    }, 15000); // 15s
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     loadComments();
     const interval = setInterval(loadComments, 3000);
     return () => clearInterval(interval);
@@ -102,7 +124,7 @@ export default function CommentsTVPage() {
       <audio ref={audioRef} preload="auto" className="hidden" />
 
       <h1 className="text-center text-6xl font-extrabold mb-14 drop-shadow-lg">
-        🎉 TƯỜNG TÂM SỰ HÒA KHÁNH RUNNERS
+        🎉 {TITLES[titleIndex]}
       </h1>
 
       <div className="columns-3 gap-10 space-y-10">
