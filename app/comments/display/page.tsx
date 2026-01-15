@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Heart, Plus } from "lucide-react";
+import toast from "react-hot-toast";
 
 type Comment = {
   id: number;
@@ -31,6 +32,33 @@ export default function CommentsDisplayPage() {
 
     if (!error) setComments(data || []);
   };
+  function getDeviceId() {
+    let id = localStorage.getItem("qr_device_id");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("qr_device_id", id);
+    }
+    return id;
+  }
+  async function initQuaySo() {
+    const deviceId = getDeviceId();
+    // toast.success("Tất cả mọi người đã trúng thưởng rồi! 🎉" + deviceId);
+    const { error: quaysoError } = await supabase.from("quayso").upsert(
+      {
+        device_id: deviceId,
+        author_name: null, // chưa nhập
+      },
+      { onConflict: "device_id" }
+    );
+
+    if (quaysoError) {
+      toast.success("Error initializing quayso:" + JSON.stringify(quaysoError));
+    }
+  }
+  useEffect(() => {
+    toast.success(" ");
+    initQuaySo();
+  }, []);
 
   useEffect(() => {
     loadComments();

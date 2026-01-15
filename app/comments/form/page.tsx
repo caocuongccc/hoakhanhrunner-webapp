@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Send, MessageSquare } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import toast from "react-hot-toast";
-import { support } from "jszip";
 
 export default function CommentsFormPage() {
   const [formData, setFormData] = useState({
@@ -13,6 +12,7 @@ export default function CommentsFormPage() {
     year: new Date().getFullYear(),
   });
   const [submitting, setSubmitting] = useState(false);
+
   const FUNNY_NAMES = [
     "Runner giấu tên 🏃",
     "Chạy cho vui 😆",
@@ -20,7 +20,6 @@ export default function CommentsFormPage() {
     "PR hụt nhưng vui 😅",
     "Chạy không pace 📉",
     "Đồng run huyền thoại 😎",
-
     "Chạy xong mới nhớ 😵",
     "Người lạc nhịp 💨",
     "Anh/chị em HKR 💜",
@@ -48,46 +47,81 @@ export default function CommentsFormPage() {
     "Đồng run quốc dân",
     "Tới cho đủ hình 📸",
   ];
+  function getDeviceId() {
+    let id = localStorage.getItem("qr_device_id");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("qr_device_id", id);
+    }
+    return id;
+  }
   const getRandomName = () =>
     FUNNY_NAMES[Math.floor(Math.random() * FUNNY_NAMES.length)];
 
   const handleSubmit = async () => {
+    // Validate tên (bắt buộc)
+    if (!formData.author_name.trim()) {
+      // alert("⚠️ Vui lòng nhập tên để tham gia quay số may mắn!");
+      toast.error("⚠️ Vui lòng nhập tên để tham gia quay số may mắn! 😅");
+      return;
+    }
+
+    // Validate nội dung
     if (!formData.content.trim()) {
-      toast.error("Chưa nhập nội dung kìa 😅");
+      toast.error("⚠️ Chưa nhập nội dung kìa 😅");
       return;
     }
 
     setSubmitting(true);
-    const toastId = toast.loading("Đang gửi tâm sự...");
 
     try {
-      const authorName = formData.author_name.trim()
-        ? formData.author_name.trim()
-        : getRandomName();
-      console.log("Submitting comment by:", authorName);
-      /* ✅ INSERT thẳng vào Supabase */
-      const { error } = await supabase.from("post_comments").insert([
-        {
-          author_name: authorName,
-          content: formData.content,
-          year: formData.year,
-        },
-      ]);
-      if (error) throw error;
+      const realName = formData.author_name.trim();
+      const displayName = getRandomName();
 
-      toast.success("🎉 Đã gửi thành công!", { id: toastId });
+      console.log("Submitting with:");
+      console.log("- Real name (for quayso):", realName);
+      console.log("- Display name (for post_comments):", displayName);
 
+      // 1️⃣ Lưu tên THẬT vào bảng quayso
+      // Uncomment trong production:
+      const { error: quaysoError } = await supabase
+        .from("quayso")
+        .update({ author_name: realName })
+        .eq("device_id", getDeviceId());
+
+      if (quaysoError) throw quaysoError;
+      // 2️⃣ Lưu comment với tên NGẪU NHIÊN vào post_comments
+      // Uncomment trong production:
+      const { error: commentError } = await supabase
+        .from("post_comments")
+        .insert([
+          {
+            author_name: displayName,
+            content: formData.content,
+            year: formData.year,
+          },
+        ]);
+
+      if (commentError) throw commentError;
+
+      toast.success(
+        "🎉 Đã gửi thành công! Bạn đã được tham gia quay số may mắn"
+      );
+      // Reset form
       setFormData({
         author_name: "",
         content: "",
         year: new Date().getFullYear(),
       });
 
-      // Redirect to display page
-      window.location.href = "/comments/display";
+      // Redirect về display page
+      setTimeout(() => {
+        //window.location.href = "/comments/display";
+      }, 500);
     } catch (error) {
-      console.error("Error submitting comment:", error);
-      toast.error("❌ Gửi thất bại, thử lại nhé!", error, { id: toastId });
+      toast.error("❌ Gửi thất bại, thử lại nhé!" + JSON.stringify(error), {
+        duration: 4000,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -101,21 +135,22 @@ export default function CommentsFormPage() {
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full mb-4">
             <MessageSquare className="h-10 w-10 text-white" />
           </div>
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
             💬 Chia Sẻ Tâm Sự
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-lg md:text-xl text-gray-600">
             Hãy để lại những cảm xúc, kỷ niệm và mong ước của bạn về CLB
           </p>
         </div>
 
         {/* Form Card */}
-        <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-10">
+        <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-10">
           <div className="space-y-6">
             {/* Name Input */}
             <div>
               <label className="block text-lg font-semibold text-gray-900 mb-3">
-                Tên của bạn <span className="text-red-500">*</span>
+                Nhập tên của bạn (để tham gia quay số may mắn){" "}
+                <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -131,7 +166,7 @@ export default function CommentsFormPage() {
             {/* Content Textarea */}
             <div>
               <label className="block text-lg font-semibold text-gray-900 mb-3">
-                Tâm sự của bạn <span className="text-red-500">*</span>
+                Nhập chia sẻ của bạn <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={formData.content}
@@ -140,7 +175,7 @@ export default function CommentsFormPage() {
                 }
                 rows={5}
                 className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none resize-none transition-colors"
-                placeholder="Chia sẻ những kỷ niệm đẹp, cảm xúc, hoặc mong ước của bạn về Hòa Khánh Runners trong năm qua..."
+                placeholder="Bạn có thể chia sẻ về những buổi chạy đáng nhớ, những người bạn mới, mục tiêu đã đạt được, hoặc ước mơ cho năm tới..."
               />
               <div className="flex justify-between mt-2">
                 <p className="text-sm text-gray-500">
@@ -153,14 +188,14 @@ export default function CommentsFormPage() {
             {/* Info Box */}
             <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4">
               <p className="text-sm text-blue-800">
-                <strong>💡 Gợi ý:</strong> Bạn có thể chia sẻ về những buổi chạy
-                đáng nhớ, những người bạn mới, mục tiêu đã đạt được, hoặc ước mơ
-                cho năm tới...
+                <strong>💡 Lưu ý:</strong> Tên của bạn sẽ được dùng để tham gia
+                quay số may mắn. Tâm sự sẽ hiển thị với tên ngẫu nhiên để BẢO
+                MẬT danh tính.
               </p>
             </div>
 
             {/* Submit Button */}
-            <div className="flex gap-4">
+            <div className="flex flex-col md:flex-row gap-4">
               <button
                 onClick={() => (window.location.href = "/comments/display")}
                 className="flex-1 px-8 py-4 text-lg border-2 border-gray-300 text-gray-700 font-bold rounded-2xl hover:bg-gray-50 transition-colors"
@@ -186,8 +221,8 @@ export default function CommentsFormPage() {
         </div>
 
         {/* Bottom Note */}
-        <p className="text-center text-gray-500 mt-6">
-          Tất cả tâm sự sẽ được hiển thị công khai trên tường tâm sự của CLB
+        <p className="text-center text-gray-500 mt-6 text-sm md:text-base">
+          Tên của bạn được dùng để tham gia quay số. Tâm sự sẽ hiển thị ẨN DANH.
         </p>
       </div>
     </div>
