@@ -17,7 +17,7 @@ type Comment = {
 export default function CommentsDisplayPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [highlightId, setHighlightId] = useState<number | null>(null);
-
+  const [userName, setUserName] = useState("");
   const pathname = usePathname();
   const router = useRouter();
 
@@ -42,21 +42,39 @@ export default function CommentsDisplayPage() {
   }
   async function initQuaySo() {
     const deviceId = getDeviceId();
-    // toast.success("Tất cả mọi người đã trúng thưởng rồi! 🎉" + deviceId);
-    const { error: quaysoError } = await supabase.from("quayso").upsert(
-      {
-        device_id: deviceId,
-        author_name: null, // chưa nhập
-      },
-      { onConflict: "device_id" }
-    );
+    if (!deviceId) return;
 
-    if (quaysoError) {
-      toast.success("Error initializing quayso:" + JSON.stringify(quaysoError));
+    const { data, error } = await supabase
+      .from("quayso")
+      .select("author_name")
+      .eq("device_id", deviceId)
+      .maybeSingle(); // 👈 rất quan trọng
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setUserName(data?.author_name || "");
+    // 👉 ĐÃ CÓ TÊN → KHÔNG ĐỘNG GÌ NỮA
+    if (data?.author_name) {
+      return;
+    }
+
+    // 👉 CHƯA CÓ RECORD → INSERT
+    if (!data) {
+      const { error: insertError } = await supabase.from("quayso").insert({
+        device_id: deviceId,
+        author_name: null,
+      });
+
+      if (insertError) {
+        console.error("Insert quayso error:", insertError);
+      }
     }
   }
+
   useEffect(() => {
-    toast.success(" ");
+    // toast.success(" ");
     initQuaySo();
   }, []);
 
@@ -92,21 +110,34 @@ export default function CommentsDisplayPage() {
         🎉 Tường Tâm Sự HKR
       </h1>
 
-      {/* 👉 NÚT THÊM COMMENT (ẨN Ở TV MODE) */}
-      {!isTVMode && (
-        <div className="flex justify-center mb-10">
+      <div className="flex flex-wrap justify-center gap-6 mb-10">
+        {/* 👉 NÚT THÊM COMMENT (ẨN Ở TV MODE) */}
+        {!isTVMode && (
           <button
             onClick={() => router.push("/comments/form")}
             className="flex items-center gap-2 px-8 py-4
-              bg-gradient-to-r from-pink-500 to-purple-600
-              text-white font-bold rounded-full shadow-xl
-              hover:scale-105 transition-transform"
+        bg-gradient-to-r from-pink-500 to-purple-600
+        text-white font-bold rounded-full shadow-xl
+        hover:scale-105 transition-transform"
           >
             <Plus className="w-5 h-5" />
             Gửi tâm sự của bạn
           </button>
-        </div>
-      )}
+        )}
+
+        {/* 🔥 NÚT ĐẤU GIÁ – CHỈ HIỆN KHI CÓ TÊN */}
+        {userName && (
+          <button
+            onClick={() => (window.location.href = "/auction/player")}
+            className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 md:py-4
+        bg-gradient-to-r from-amber-500 to-orange-600
+        text-white font-bold rounded-full shadow-xl
+        hover:scale-105 transition-transform animate-pulse"
+          >
+            🔥 Tham gia đấu giá
+          </button>
+        )}
+      </div>
 
       {/* Comments */}
       <div className="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6">

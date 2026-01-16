@@ -10,7 +10,7 @@ export default function Navigation() {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   /* 🔥 ẨN MENU CHO COMMENTS / TV / FORM */
-  if (pathname.startsWith("/comments")) {
+  if (pathname.startsWith("/comments") || pathname.startsWith("/auction")) {
     return null;
   }
   const handleLogout = async () => {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Send, MessageSquare } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import toast from "react-hot-toast";
+import { set } from "date-fns";
 
 export default function CommentsFormPage() {
   const [formData, setFormData] = useState({
@@ -12,7 +13,7 @@ export default function CommentsFormPage() {
     year: new Date().getFullYear(),
   });
   const [submitting, setSubmitting] = useState(false);
-
+  const [userName, setUserName] = useState("");
   const FUNNY_NAMES = [
     "Runner giấu tên 🏃",
     "Chạy cho vui 😆",
@@ -60,8 +61,7 @@ export default function CommentsFormPage() {
 
   const handleSubmit = async () => {
     // Validate tên (bắt buộc)
-    if (!formData.author_name.trim()) {
-      // alert("⚠️ Vui lòng nhập tên để tham gia quay số may mắn!");
+    if (!formData.author_name.trim() && !userName) {
       toast.error("⚠️ Vui lòng nhập tên để tham gia quay số may mắn! 😅");
       return;
     }
@@ -82,16 +82,17 @@ export default function CommentsFormPage() {
       console.log("- Real name (for quayso):", realName);
       console.log("- Display name (for post_comments):", displayName);
 
-      // 1️⃣ Lưu tên THẬT vào bảng quayso
-      // Uncomment trong production:
-      const { error: quaysoError } = await supabase
-        .from("quayso")
-        .update({ author_name: realName })
-        .eq("device_id", getDeviceId());
+      // 👉 CHƯA CÓ TÊN → THÊM VAO BẢNG
+      if (!userName) {
+        // 1️⃣ Lưu tên THẬT vào bảng quayso
+        const { error: quaysoError } = await supabase
+          .from("quayso")
+          .update({ author_name: realName })
+          .eq("device_id", getDeviceId());
 
-      if (quaysoError) throw quaysoError;
+        if (quaysoError) throw quaysoError;
+      }
       // 2️⃣ Lưu comment với tên NGẪU NHIÊN vào post_comments
-      // Uncomment trong production:
       const { error: commentError } = await supabase
         .from("post_comments")
         .insert([
@@ -116,7 +117,7 @@ export default function CommentsFormPage() {
 
       // Redirect về display page
       setTimeout(() => {
-        //window.location.href = "/comments/display";
+        window.location.href = "/comments/display";
       }, 500);
     } catch (error) {
       toast.error("❌ Gửi thất bại, thử lại nhé!" + JSON.stringify(error), {
@@ -126,7 +127,23 @@ export default function CommentsFormPage() {
       setSubmitting(false);
     }
   };
-
+  const loadData = async () => {
+    const deviceId = getDeviceId();
+    const { data, error } = await supabase
+      .from("quayso")
+      .select("author_name")
+      .eq("device_id", deviceId)
+      .single();
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setUserName(data?.author_name || "");
+    return data;
+  };
+  useState(() => {
+    loadData();
+  }, []);
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center py-12 px-4">
       <div className="max-w-2xl w-full">
@@ -147,22 +164,30 @@ export default function CommentsFormPage() {
         <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-10">
           <div className="space-y-6">
             {/* Name Input */}
-            <div>
-              <label className="block text-lg font-semibold text-gray-900 mb-3">
-                Nhập tên của bạn (để tham gia quay số may mắn){" "}
-                <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.author_name}
-                onChange={(e) =>
-                  setFormData({ ...formData, author_name: e.target.value })
-                }
-                className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none transition-colors"
-                placeholder="VD: Nguyễn Văn A"
-              />
-            </div>
-
+            {!userName ? (
+              <div>
+                <label className="block text-lg font-semibold text-gray-900 mb-3">
+                  Nhập tên của bạn (để tham gia quay số may mắn){" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.author_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, author_name: e.target.value })
+                  }
+                  className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none transition-colors"
+                  placeholder="VD: Nguyễn Văn A"
+                />
+              </div>
+            ) : (
+              <div className="p-4 bg-green-50 border-2 border-green-200 rounded-2xl">
+                <p className="text-green-800">
+                  🎉 Bạn đã đăng ký tên "<strong>{userName}</strong>" để tham
+                  gia quay số may mắn!
+                </p>
+              </div>
+            )}
             {/* Content Textarea */}
             <div>
               <label className="block text-lg font-semibold text-gray-900 mb-3">
