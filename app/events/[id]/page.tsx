@@ -17,6 +17,9 @@ import { vi } from "date-fns/locale";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import EventDashboard from "@/components/EventDashboard";
+import EventLeaderboard from "@/components/EventLeaderboard";
+import UserBadges from "@/components/UserBadges";
+import MinActiveDaysProgress from "@/components/MinActiveDaysProgress";
 
 export default function EventDetailPage() {
   const params = useParams();
@@ -229,7 +232,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Rules */}
-      {rules.length > 0 && (
+      {/* {rules.length > 0 && (
         <div className="bg-white rounded-xl shadow-md p-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center">
             <Info className="h-6 w-6 mr-2 text-blue-600" />
@@ -249,8 +252,16 @@ export default function EventDetailPage() {
             ))}
           </div>
         </div>
-      )}
+      )} */}
 
+      {/* Progress */}
+      <MinActiveDaysProgress eventId={eventId} />
+
+      {/* Leaderboard */}
+      {/* <EventLeaderboard eventId={eventId} /> */}
+
+      {/* User's badges */}
+      {/* <UserBadges eventId={eventId} showLocked={true} /> */}
       {/* Teams List (for team events) */}
       {event.event_type === "team" && teams.length > 0 && (
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -512,7 +523,7 @@ function EventStatistics({
       const topRunner =
         participants && participants.length > 0
           ? participants.reduce((top, p) =>
-              p.total_km > (top?.total_km || 0) ? p : top
+              p.total_km > (top?.total_km || 0) ? p : top,
             )
           : null;
 

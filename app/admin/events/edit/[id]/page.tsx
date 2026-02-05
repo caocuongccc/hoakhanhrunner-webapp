@@ -1,3 +1,4 @@
+// app/admin/events/edit/[id]/page.tsx - FIXED: Show date AND time correctly
 "use client";
 
 import { useState, useEffect } from "react";
@@ -23,7 +24,9 @@ export default function EditEventPage() {
     description: "",
     event_type: "individual" as "team" | "individual",
     start_date: "",
+    start_time: "00:00",
     end_date: "",
+    end_time: "23:59",
     password: "",
     max_team_members: "",
     image_url: "",
@@ -43,12 +46,24 @@ export default function EditEventPage() {
 
       if (error) throw error;
 
+      // Parse datetime strings to separate date and time
+      const startDateTime = new Date(event.start_date);
+      const endDateTime = new Date(event.end_date);
+
+      const startDate = startDateTime.toISOString().split("T")[0];
+      const startTime = startDateTime.toTimeString().slice(0, 5); // HH:MM
+
+      const endDate = endDateTime.toISOString().split("T")[0];
+      const endTime = endDateTime.toTimeString().slice(0, 5); // HH:MM
+
       setFormData({
         name: event.name,
         description: event.description || "",
         event_type: event.event_type,
-        start_date: event.start_date,
-        end_date: event.end_date,
+        start_date: startDate,
+        start_time: startTime,
+        end_date: endDate,
+        end_time: endTime,
         password: event.password || "",
         max_team_members: event.max_team_members?.toString() || "",
         image_url: event.image_url || "",
@@ -116,9 +131,13 @@ export default function EditEventPage() {
     setSaving(true);
 
     try {
+      // Combine date and time
+      const startDateTime = `${formData.start_date}T${formData.start_time}:00`;
+      const endDateTime = `${formData.end_date}T${formData.end_time}:00`;
+
       // Validate dates
-      if (new Date(formData.end_date) < new Date(formData.start_date)) {
-        alert("Ngày kết thúc phải sau ngày bắt đầu!");
+      if (new Date(endDateTime) < new Date(startDateTime)) {
+        alert("Thời gian kết thúc phải sau thời gian bắt đầu!");
         setSaving(false);
         return;
       }
@@ -139,8 +158,8 @@ export default function EditEventPage() {
           name: formData.name,
           description: formData.description,
           event_type: formData.event_type,
-          start_date: formData.start_date,
-          end_date: formData.end_date,
+          start_date: startDateTime,
+          end_date: endDateTime,
           password: formData.password || null,
           max_team_members: formData.max_team_members
             ? parseInt(formData.max_team_members)
@@ -303,7 +322,7 @@ export default function EditEventPage() {
             </div>
           )}
 
-          {/* Dates */}
+          {/* Start Date & Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -321,6 +340,24 @@ export default function EditEventPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giờ bắt đầu <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                required
+                value={formData.start_time}
+                onChange={(e) =>
+                  setFormData({ ...formData, start_time: e.target.value })
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* End Date & Time */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Ngày kết thúc <span className="text-red-500">*</span>
               </label>
               <input
@@ -329,6 +366,20 @@ export default function EditEventPage() {
                 value={formData.end_date}
                 onChange={(e) =>
                   setFormData({ ...formData, end_date: e.target.value })
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giờ kết thúc <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                required
+                value={formData.end_time}
+                onChange={(e) =>
+                  setFormData({ ...formData, end_time: e.target.value })
                 }
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />

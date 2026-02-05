@@ -4,7 +4,7 @@ import { createSupabaseClient } from "@/lib/supabase";
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const eventId = (await context.params).id;
@@ -14,7 +14,7 @@ export async function GET(
     if (!userId) {
       return NextResponse.json(
         { error: "userId is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -33,7 +33,7 @@ export async function GET(
       console.error("Error loading activities:", error);
       return NextResponse.json(
         { error: "Failed to load activities" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -45,7 +45,7 @@ export async function GET(
     console.error("User activities API error:", error);
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

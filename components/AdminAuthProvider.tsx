@@ -19,7 +19,7 @@ type AdminAuthContextType = {
 };
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export function useAdminAuth() {
@@ -50,10 +50,8 @@ export default function AdminAuthProvider({
 
   const loadAdmin = async () => {
     try {
-      console.log("Loading admin session...");
       const response = await fetch("/api/admin/session");
       const data = await response.json();
-      console.log("Admin session data:", data);
 
       if (data.admin) {
         setAdmin(data.admin);

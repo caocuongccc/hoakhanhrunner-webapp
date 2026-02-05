@@ -7,8 +7,6 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies();
     const token = cookieStore.get("admin_token")?.value;
 
-    console.log("Checking admin session, token:", token ? "exists" : "null");
-
     if (!token) {
       return NextResponse.json({ admin: null });
     }
@@ -20,8 +18,6 @@ export async function GET(request: NextRequest) {
       .eq("token", token)
       .gt("expires_at", new Date().toISOString())
       .single();
-
-    console.log("Session query result:", { session, error: sessionError });
 
     if (sessionError || !session) {
       console.log("Invalid session, clearing cookie");
@@ -36,8 +32,6 @@ export async function GET(request: NextRequest) {
       .eq("id", session.admin_id)
       .eq("is_active", true)
       .single();
-
-    console.log("Admin query result:", { admin, error: adminError });
 
     if (adminError || !admin) {
       console.log("Admin not found, clearing cookie");

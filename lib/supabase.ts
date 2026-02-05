@@ -4,7 +4,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 // For server-side
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
 // For client-side components
@@ -70,6 +70,7 @@ export type Team = {
 };
 
 export type Activity = {
+  start_date: string | number | Date;
   id: string;
   user_id: string;
   event_id: string;
