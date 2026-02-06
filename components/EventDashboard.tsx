@@ -1,439 +1,334 @@
+// components/EventDashboard.tsx - UPDATED with tracklog action
 "use client";
 
-import { useState, useEffect } from "react";
-import { Trophy, Medal, Award, Users, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
 import { createSupabaseClient } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
+import {
+  Activity,
+  ChevronRight,
+  Trophy,
+  TrendingUp,
+  Award,
+} from "lucide-react";
 
-type TeamRanking = {
-  id: string;
-  name: string;
-  total_points: number;
-  total_km: number;
-  member_count: number;
-};
-
-type IndividualRanking = {
-  user_id: string;
-  username: string;
-  full_name: string;
-  avatar_url: string;
-  team_name?: string;
-  total_km: number;
-  total_points: number;
-  activities_count: number;
-};
-
-type EventDashboardProps = {
+interface DashboardProps {
   eventId: string;
-  eventType: "team" | "individual";
-};
+  onViewTracklog?: (userId: string, userName: string) => void; // NEW: Callback to open tracklog modal
+}
 
 export default function EventDashboard({
   eventId,
-  eventType,
-}: EventDashboardProps) {
-  const [view, setView] = useState<"team" | "individual">(
-    eventType === "team" ? "team" : "individual"
-  );
-  const [teamRankings, setTeamRankings] = useState<TeamRanking[]>([]);
-  const [individualRankings, setIndividualRankings] = useState<
-    IndividualRanking[]
-  >([]);
+  onViewTracklog,
+}: DashboardProps) {
+  const { user } = useAuth();
+  const [participants, setParticipants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const supabase = createSupabaseClient();
 
   useEffect(() => {
-    loadRankings();
-  }, [eventId, view, selectedTeam]);
+    loadParticipants();
+  }, [eventId]);
 
-  const loadRankings = async () => {
-    setLoading(true);
+  const loadParticipants = async () => {
     try {
-      if (view === "team" && eventType === "team") {
-        await loadTeamRankings();
-      } else {
-        await loadIndividualRankings();
-      }
+      const { data, error } = await supabase
+        .from("event_participants")
+        .select(
+          `
+          *,
+          users (
+            id,
+            username,
+            email,
+            avatar_url
+          )
+        `,
+        )
+        .eq("event_id", eventId)
+        .order("total_km", { ascending: false });
+
+      if (error) throw error;
+      setParticipants(data || []);
     } catch (error) {
-      console.error("Error loading rankings:", error);
+      console.error("Error loading participants:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadTeamRankings = async () => {
-    const { data: teams, error } = await supabase
-      .from("teams")
-      .select("*")
-      .eq("event_id", eventId)
-      .order("total_points", { ascending: false });
-
-    if (error) throw error;
-
-    // Get member count and total km for each team
-    const teamsWithStats = await Promise.all(
-      (teams || []).map(async (team) => {
-        const { count } = await supabase
-          .from("team_members")
-          .select("*", { count: "exact", head: true })
-          .eq("team_id", team.id);
-
-        const { data: activities } = await supabase
-          .from("activities")
-          .select("distance_km, user_id")
-          .eq("event_id", eventId)
-          .in("user_id", [
-            supabase
-              .from("team_members")
-              .select("user_id")
-              .eq("team_id", team.id),
-          ]);
-
-        const totalKm =
-          activities?.reduce((sum, a) => sum + (a.distance_km || 0), 0) || 0;
-
-        return {
-          ...team,
-          member_count: count || 0,
-          total_km: totalKm,
-        };
-      })
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
     );
+  }
 
-    setTeamRankings(teamsWithStats);
-  };
-
-  const loadIndividualRankings = async () => {
-    let query = supabase
-      .from("event_participants")
-      .select(
-        `
-        user_id,
-        total_km,
-        total_points,
-        team_id,
-        users!event_participants_user_id_fkey(username, full_name, avatar_url),
-        teams(name)
-      `
-      )
-      .eq("event_id", eventId);
-
-    if (selectedTeam) {
-      query = query.eq("team_id", selectedTeam);
-    }
-
-    const { data, error } = await query.order("total_points", {
-      ascending: false,
-    });
-
-    if (error) throw error;
-
-    // Get activity count for each participant
-    const participantsWithCount = await Promise.all(
-      (data || []).map(async (participant) => {
-        const { count } = await supabase
-          .from("activities")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", participant.user_id)
-          .eq("event_id", eventId);
-
-        return {
-          user_id: participant.user_id,
-          username: participant.users.username,
-          full_name: participant.users.full_name,
-          avatar_url: participant.users.avatar_url,
-          team_name: participant.teams?.name,
-          total_km: participant.total_km || 0,
-          total_points: participant.total_points || 0,
-          activities_count: count || 0,
-        };
-      })
+  if (participants.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <Trophy className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+        <p>Chưa có người tham gia nào</p>
+      </div>
     );
-
-    setIndividualRankings(participantsWithCount);
-  };
-
-  const getMedalIcon = (rank: number) => {
-    if (rank === 1) return <Trophy className="h-6 w-6 text-yellow-500" />;
-    if (rank === 2) return <Medal className="h-6 w-6 text-gray-400" />;
-    if (rank === 3) return <Award className="h-6 w-6 text-orange-600" />;
-    return null;
-  };
+  }
 
   return (
     <div className="space-y-6">
-      {/* View Toggle */}
-      {eventType === "team" && (
-        <div className="flex justify-center">
-          <div className="inline-flex bg-white rounded-lg shadow-md p-1">
-            <button
-              onClick={() => {
-                setView("team");
-                setSelectedTeam(null);
-              }}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${
-                view === "team"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              Xếp hạng đội
-            </button>
-            <button
-              onClick={() => setView("individual")}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${
-                view === "individual"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              Xếp hạng cá nhân
-            </button>
+      {/* Top 3 Podium */}
+      {participants.length >= 3 && (
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          {/* 2nd Place */}
+          <div className="text-center pt-8">
+            <div className="relative inline-block">
+              <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-500 rounded-full flex items-center justify-center mx-auto mb-2 border-4 border-white shadow-lg">
+                {participants[1]?.users?.avatar_url ? (
+                  <img
+                    src={participants[1].users.avatar_url}
+                    alt={participants[1].users.username}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-2xl font-bold text-white">
+                    {participants[1]?.users?.username?.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center text-white font-bold text-sm shadow">
+                2
+              </div>
+            </div>
+            <div className="font-bold text-gray-900 truncate">
+              {participants[1]?.users?.username}
+            </div>
+            <div className="text-sm text-gray-600">
+              {participants[1]?.total_km?.toFixed(1) || 0} km
+            </div>
+          </div>
+
+          {/* 1st Place */}
+          <div className="text-center">
+            <div className="relative inline-block">
+              <div className="w-24 h-24 bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-full flex items-center justify-center mx-auto mb-2 border-4 border-white shadow-xl">
+                {participants[0]?.users?.avatar_url ? (
+                  <img
+                    src={participants[0].users.avatar_url}
+                    alt={participants[0].users.username}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-3xl font-bold text-white">
+                    {participants[0]?.users?.username?.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
+                <Trophy className="h-8 w-8 text-yellow-500 drop-shadow-lg" />
+              </div>
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg">
+                1
+              </div>
+            </div>
+            <div className="font-bold text-gray-900 text-lg truncate">
+              {participants[0]?.users?.username}
+            </div>
+            <div className="text-sm text-yellow-600 font-semibold">
+              {participants[0]?.total_km?.toFixed(1) || 0} km
+            </div>
+          </div>
+
+          {/* 3rd Place */}
+          <div className="text-center pt-12">
+            <div className="relative inline-block">
+              <div className="w-18 h-18 bg-gradient-to-br from-amber-600 to-amber-800 rounded-full flex items-center justify-center mx-auto mb-2 border-4 border-white shadow-lg">
+                {participants[2]?.users?.avatar_url ? (
+                  <img
+                    src={participants[2].users.avatar_url}
+                    alt={participants[2].users.username}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xl font-bold text-white">
+                    {participants[2]?.users?.username?.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-amber-700 rounded-full flex items-center justify-center text-white font-bold text-xs shadow">
+                3
+              </div>
+            </div>
+            <div className="font-bold text-gray-900 text-sm truncate">
+              {participants[2]?.users?.username}
+            </div>
+            <div className="text-xs text-gray-600">
+              {participants[2]?.total_km?.toFixed(1) || 0} km
+            </div>
           </div>
         </div>
       )}
 
-      {/* Team Filter (for individual view in team events) */}
-      {eventType === "team" &&
-        view === "individual" &&
-        teamRankings.length > 0 && (
-          <div className="flex items-center space-x-2 overflow-x-auto pb-2">
-            <button
-              onClick={() => setSelectedTeam(null)}
-              className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
-                !selectedTeam
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              Tất cả
-            </button>
-            {teamRankings.map((team) => (
-              <button
-                key={team.id}
-                onClick={() => setSelectedTeam(team.id)}
-                className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
-                  selectedTeam === team.id
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-700 hover:bg-gray-100"
+      {/* Full Leaderboard */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
+          <TrendingUp className="h-5 w-5 text-blue-600" />
+          <span>Bảng xếp hạng chi tiết</span>
+        </h3>
+
+        <div className="space-y-2">
+          {participants.map((participant, index) => {
+            const isCurrentUser = user && participant.user_id === user.id;
+            const rank = index + 1;
+
+            return (
+              <div
+                key={participant.id}
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  isCurrentUser
+                    ? "border-blue-500 bg-blue-50 shadow-md"
+                    : rank <= 3
+                      ? "border-yellow-200 bg-yellow-50"
+                      : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
                 }`}
               >
-                {team.name}
-              </button>
-            ))}
-          </div>
-        )}
+                <div className="flex items-center space-x-4">
+                  {/* Rank Badge */}
+                  <div
+                    className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                      rank === 1
+                        ? "bg-gradient-to-br from-yellow-400 to-yellow-600 text-white shadow-lg"
+                        : rank === 2
+                          ? "bg-gradient-to-br from-gray-300 to-gray-500 text-white shadow-md"
+                          : rank === 3
+                            ? "bg-gradient-to-br from-amber-600 to-amber-800 text-white shadow-md"
+                            : "bg-gray-200 text-gray-700"
+                    }`}
+                  >
+                    {rank}
+                  </div>
 
-      {/* Rankings */}
-      {loading ? (
-        <div className="bg-white rounded-xl shadow-md p-8">
-          <div className="animate-pulse space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-1/4" />
-                  <div className="h-3 bg-gray-200 rounded w-1/3" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : view === "team" ? (
-        <TeamRankingsTable
-          rankings={teamRankings}
-          getMedalIcon={getMedalIcon}
-        />
-      ) : (
-        <IndividualRankingsTable
-          rankings={individualRankings}
-          getMedalIcon={getMedalIcon}
-        />
-      )}
-    </div>
-  );
-}
-
-function TeamRankingsTable({
-  rankings,
-  getMedalIcon,
-}: {
-  rankings: TeamRanking[];
-  getMedalIcon: (rank: number) => React.ReactNode;
-}) {
-  if (rankings.length === 0) {
-    return (
-      <div className="bg-white rounded-xl shadow-md p-12 text-center">
-        <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-        <p className="text-gray-500 text-lg">Chưa có đội nào tham gia</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Hạng
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Đội
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Thành viên
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Tổng km
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Điểm
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {rankings.map((team, index) => (
-              <tr key={team.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center space-x-2">
-                    {getMedalIcon(index + 1) || (
-                      <span className="text-lg font-bold text-gray-600 w-6 text-center">
-                        {index + 1}
-                      </span>
+                  {/* Avatar */}
+                  <div className="flex-shrink-0">
+                    {participant.users?.avatar_url ? (
+                      <img
+                        src={participant.users.avatar_url}
+                        alt={participant.users.username}
+                        className="w-12 h-12 rounded-full border-2 border-gray-200 object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-lg border-2 border-gray-200">
+                        {participant.users?.username?.charAt(0).toUpperCase()}
+                      </div>
                     )}
                   </div>
-                </td>
-                <td className="px-6 py-4">
-                  <p className="font-medium text-gray-900">{team.name}</p>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center text-gray-600">
-                    <Users className="h-4 w-4 mr-2" />
-                    <span>{team.member_count}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center text-gray-600">
-                    <TrendingUp className="h-4 w-4 mr-2" />
-                    <span className="font-medium">
-                      {team.total_km.toFixed(2)} km
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-lg font-bold text-blue-600">
-                    {team.total_points.toFixed(2)}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
-function IndividualRankingsTable({
-  rankings,
-  getMedalIcon,
-}: {
-  rankings: IndividualRanking[];
-  getMedalIcon: (rank: number) => React.ReactNode;
-}) {
-  if (rankings.length === 0) {
-    return (
-      <div className="bg-white rounded-xl shadow-md p-12 text-center">
-        <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-        <p className="text-gray-500 text-lg">Chưa có người tham gia</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Hạng
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Vận động viên
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Hoạt động
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Tổng km
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Điểm
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {rankings.map((participant, index) => (
-              <tr key={participant.user_id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center space-x-2">
-                    {getMedalIcon(index + 1) || (
-                      <span className="text-lg font-bold text-gray-600 w-6 text-center">
-                        {index + 1}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0">
-                      {participant.avatar_url ? (
-                        <img
-                          src={participant.avatar_url}
-                          alt={participant.username}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-gray-600 font-bold">
-                          {participant.username.charAt(0).toUpperCase()}
+                  {/* User Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <h4 className="font-bold text-gray-900 truncate">
+                        {participant.users?.username || "Unknown"}
+                      </h4>
+                      {isCurrentUser && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                          Bạn
                         </span>
                       )}
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {participant.username}
-                      </p>
-                      {participant.team_name && (
-                        <p className="text-xs text-gray-500">
-                          {participant.team_name}
-                        </p>
-                      )}
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <span className="text-gray-500 text-xs">Tổng km</span>
+                        <div className="font-semibold text-gray-900">
+                          {participant.total_km?.toFixed(1) || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">Điểm</span>
+                        <div className="font-semibold text-gray-900">
+                          {participant.total_points?.toFixed(0) || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">Hoạt động</span>
+                        <div className="font-semibold text-gray-900">
+                          {participant.activity_count || 0}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-gray-600">
-                    {participant.activities_count}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="font-medium text-gray-900">
-                    {participant.total_km.toFixed(2)} km
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-lg font-bold text-blue-600">
-                    {participant.total_points.toFixed(2)}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+                  {/* View Tracklog Button */}
+                  {onViewTracklog && (
+                    <button
+                      onClick={() =>
+                        onViewTracklog(
+                          participant.user_id,
+                          participant.users?.username || "User",
+                        )
+                      }
+                      className="flex-shrink-0 flex items-center space-x-1 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors font-medium text-sm group"
+                      title="Xem tracklog"
+                    >
+                      <Activity className="h-4 w-4" />
+                      <span className="hidden sm:inline">Tracklog</span>
+                      <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Progress Bar */}
+                {participants[0]?.total_km > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <span>Tiến độ so với top 1</span>
+                      <span>
+                        {(
+                          (participant.total_km / participants[0].total_km) *
+                          100
+                        ).toFixed(0)}
+                        %
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          rank === 1
+                            ? "bg-gradient-to-r from-yellow-400 to-yellow-600"
+                            : rank === 2
+                              ? "bg-gradient-to-r from-gray-400 to-gray-600"
+                              : rank === 3
+                                ? "bg-gradient-to-r from-amber-500 to-amber-700"
+                                : "bg-gradient-to-r from-blue-400 to-blue-600"
+                        }`}
+                        style={{
+                          width: `${Math.min(
+                            (participant.total_km / participants[0].total_km) *
+                              100,
+                            100,
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Summary Footer */}
+      <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl">
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center space-x-2">
+            <Award className="h-5 w-5 text-blue-600" />
+            <span className="text-gray-700 font-medium">
+              Tổng số người tham gia: <strong>{participants.length}</strong>
+            </span>
+          </div>
+          <div className="text-gray-600">Top 3 được highlight đặc biệt</div>
+        </div>
       </div>
     </div>
   );

@@ -76,7 +76,7 @@ export default function FeedsPage() {
             avatar_url,
             username
           )
-        `
+        `,
         )
         .gte("start_date_local", thirtyDaysAgo.toISOString())
         .order("start_date_local", { ascending: false })
@@ -107,6 +107,7 @@ export default function FeedsPage() {
   };
 
   const formatPace = (distanceMeters: number, movingTimeSeconds: number) => {
+    console.log("Calculating pace for:", { distanceMeters, movingTimeSeconds });
     if (distanceMeters === 0 || movingTimeSeconds === 0) return "N/A";
     const paceSeconds = (movingTimeSeconds / distanceMeters) * 1000;
     const minutes = Math.floor(paceSeconds / 60);
@@ -229,7 +230,7 @@ export default function FeedsPage() {
                         {format(
                           new Date(activity.start_date_local),
                           "dd MMM yyyy, HH:mm",
-                          { locale: vi }
+                          { locale: vi },
                         )}
                       </span>
                     </div>

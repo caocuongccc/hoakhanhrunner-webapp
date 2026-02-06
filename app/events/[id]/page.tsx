@@ -10,6 +10,10 @@ import {
   Info,
   UserPlus,
   CheckCircle,
+  TrendingUp,
+  Trophy,
+  Award,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import { createSupabaseClient, Event } from "@/lib/supabase";
 import { format, differenceInDays } from "date-fns";
@@ -17,9 +21,9 @@ import { vi } from "date-fns/locale";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import EventDashboard from "@/components/EventDashboard";
-import EventLeaderboard from "@/components/EventLeaderboard";
 import UserBadges from "@/components/UserBadges";
 import MinActiveDaysProgress from "@/components/MinActiveDaysProgress";
+import UserTracklogModal from "@/components/UserTracklogModal";
 
 export default function EventDetailPage() {
   const params = useParams();
@@ -35,6 +39,16 @@ export default function EventDetailPage() {
   const [teams, setTeams] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
   const [showJoinModal, setShowJoinModal] = useState(false);
+
+  const [tracklogModal, setTracklogModal] = useState<{
+    isOpen: boolean;
+    userId: string;
+    userName: string;
+  }>({
+    isOpen: false,
+    userId: "",
+    userName: "",
+  });
 
   useEffect(() => {
     loadEvent();
@@ -100,6 +114,24 @@ export default function EventDetailPage() {
     setShowJoinModal(true);
   };
 
+  // Handler to open tracklog modal
+  const handleViewTracklog = (userId: string, userName: string) => {
+    setTracklogModal({
+      isOpen: true,
+      userId,
+      userName,
+    });
+  };
+
+  // Handler to close tracklog modal
+  const handleCloseTracklog = () => {
+    setTracklogModal({
+      isOpen: false,
+      userId: "",
+      userName: "",
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -121,184 +153,267 @@ export default function EventDetailPage() {
   const isUpcoming = today < event.start_date;
   const isEnded = today > event.end_date;
 
-  return (
-    <div className="space-y-8">
-      {/* Back Button */}
-      <Link
-        href="/events"
-        className="inline-flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-      >
-        <ArrowLeft className="h-5 w-5" />
-        <span>Quay lại danh sách sự kiện</span>
-      </Link>
+  const eventDurationDays =
+    differenceInDays(new Date(event.end_date), new Date(event.start_date)) + 1;
 
-      {/* Event Header */}
-      <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        {/* Cover Image */}
-        {event.image_url && (
-          <div className="h-64 md:h-96 overflow-hidden">
-            <img
-              src={event.image_url}
-              alt={event.name}
-              className="w-full h-full object-cover"
-            />
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Back Button */}
+        <Link
+          href="/events"
+          className="inline-flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          <span className="font-medium">Quay lại danh sách sự kiện</span>
+        </Link>
+
+        {/* Event Header Card */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+          {/* Cover Image with Gradient Overlay */}
+          {event.image_url && (
+            <div className="relative h-64 md:h-80 overflow-hidden">
+              <img
+                src={event.image_url}
+                alt={event.name}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+
+              {/* Floating Status Badge on Image */}
+              <div className="absolute top-4 right-4">
+                {isOngoing && (
+                  <div className="px-4 py-2 bg-green-500 text-white rounded-full text-sm font-bold shadow-lg flex items-center space-x-2 animate-pulse">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                    <span>ĐANG DIỄN RA</span>
+                  </div>
+                )}
+                {isUpcoming && (
+                  <div className="px-4 py-2 bg-blue-500 text-white rounded-full text-sm font-bold shadow-lg">
+                    SẮP DIỄN RA
+                  </div>
+                )}
+                {isEnded && (
+                  <div className="px-4 py-2 bg-gray-500 text-white rounded-full text-sm font-bold shadow-lg">
+                    ĐÃ KẾT THÚC
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="p-6 md:p-8">
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div className="flex-1">
+                <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4 leading-tight">
+                  {event.name}
+                </h1>
+
+                {/* Event Meta Info */}
+                <div className="flex flex-wrap items-center gap-2 mb-6">
+                  <span className="px-3 py-1.5 bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 rounded-full text-sm font-semibold flex items-center space-x-1">
+                    <Users className="h-3.5 w-3.5" />
+                    <span>
+                      {event.event_type === "team" ? "Theo đội" : "Cá nhân"}
+                    </span>
+                  </span>
+                  {event.password && (
+                    <span className="px-3 py-1.5 bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 rounded-full text-sm font-semibold flex items-center space-x-1">
+                      <Lock className="h-3.5 w-3.5" />
+                      <span>Có mật khẩu</span>
+                    </span>
+                  )}
+                  <span className="px-3 py-1.5 bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 rounded-full text-sm font-semibold">
+                    {eventDurationDays} ngày
+                  </span>
+                </div>
+
+                {/* Event Details Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Calendar className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 font-medium">
+                        Thời gian
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {format(new Date(event.start_date), "dd/MM/yyyy", {
+                          locale: vi,
+                        })}{" "}
+                        -{" "}
+                        {format(new Date(event.end_date), "dd/MM/yyyy", {
+                          locale: vi,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Users className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 font-medium">
+                        Người tham gia
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {participantCount} người
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                {event.description && (
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <p className="text-gray-700 leading-relaxed">
+                      {event.description}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Join Button Section */}
+              {!isEnded && (
+                <div className="md:ml-6 flex-shrink-0">
+                  {isParticipating ? (
+                    <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 rounded-xl flex items-center space-x-3 border-2 border-green-200 shadow-lg">
+                      <CheckCircle className="h-6 w-6" />
+                      <div>
+                        <div className="font-bold text-lg">Đã tham gia</div>
+                        <div className="text-xs text-green-600">
+                          Bạn là thành viên
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleJoinClick}
+                      className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-xl flex items-center space-x-3"
+                    >
+                      <UserPlus className="h-6 w-6" />
+                      <div className="text-left">
+                        <div className="text-lg">Tham gia ngay</div>
+                        <div className="text-xs opacity-90">
+                          Miễn phí • Không giới hạn
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Rules Section */}
+        {/* {rules.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <Info className="h-6 w-6 text-orange-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Luật chơi</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {rules.map((rule: any) => (
+                <div
+                  key={rule.id}
+                  className="p-4 border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all"
+                >
+                  <h3 className="font-bold text-gray-900 mb-2 flex items-center space-x-2">
+                    <span className="text-lg">
+                      {getRuleIcon(rule.rule_type)}
+                    </span>
+                    <span>{rule.name}</span>
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-2">
+                    {rule.description}
+                  </p>
+                  <div className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full">
+                    {formatRuleConfig(rule)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )} */}
+
+        {/* Progress Card - Only show if user is participating */}
+        {user && isParticipating && (
+          <MinActiveDaysProgress eventId={eventId} defaultExpanded={false} />
+        )}
+
+        {/* Statistics Card */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <TrendingUp className="h-6 w-6 text-purple-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Thống kê sự kiện
+            </h2>
+          </div>
+          <EventStatistics eventId={eventId} eventType={event.event_type} />
+        </div>
+
+        {/* Dashboard with Tracklog Modal Integration */}
+        {user && isParticipating && (
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="p-6 bg-gradient-to-r from-blue-600 to-purple-600">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Trophy className="h-6 w-6 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-white">
+                  Bảng xếp hạng & Hoạt động
+                </h2>
+              </div>
+            </div>
+            <div className="p-6">
+              <EventDashboard
+                eventId={eventId}
+                onViewTracklog={handleViewTracklog}
+              />
+            </div>
           </div>
         )}
 
-        <div className="p-8">
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex-1">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                {event.name}
-              </h1>
-
-              {/* Status Badges */}
-              <div className="flex items-center space-x-2 mb-4">
-                {isOngoing && (
-                  <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
-                    Đang diễn ra
-                  </span>
-                )}
-                {isUpcoming && (
-                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-                    Sắp diễn ra
-                  </span>
-                )}
-                {isEnded && (
-                  <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-semibold">
-                    Đã kết thúc
-                  </span>
-                )}
-                <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
-                  {event.event_type === "team" ? "Theo đội" : "Cá nhân"}
-                </span>
-                {event.password && (
-                  <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-semibold inline-flex items-center">
-                    <Lock className="h-3 w-3 mr-1" />
-                    Có mật khẩu
-                  </span>
-                )}
+        {/* Badges Section - Only show if user is participating */}
+        {user && isParticipating && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="p-2 bg-yellow-100 rounded-lg">
+                <Award className="h-6 w-6 text-yellow-600" />
               </div>
-
-              {/* Event Info */}
-              <div className="space-y-3 text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-5 w-5" />
-                  <span>
-                    {format(new Date(event.start_date), "dd/MM/yyyy", {
-                      locale: vi,
-                    })}{" "}
-                    -{" "}
-                    {format(new Date(event.end_date), "dd/MM/yyyy", {
-                      locale: vi,
-                    })}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Users className="h-5 w-5" />
-                  <span>{participantCount} người đã tham gia</span>
-                </div>
-              </div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Huy hiệu của bạn
+              </h2>
             </div>
-
-            {/* Join Button */}
-            {!isEnded && (
-              <div className="ml-6">
-                {isParticipating ? (
-                  <div className="px-6 py-3 bg-green-50 text-green-700 rounded-lg flex items-center space-x-2 border border-green-200">
-                    <CheckCircle className="h-5 w-5" />
-                    <span className="font-semibold">Đã tham gia</span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleJoinClick}
-                    className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                  >
-                    <UserPlus className="h-5 w-5" />
-                    <span>Tham gia ngay</span>
-                  </button>
-                )}
-              </div>
-            )}
+            <UserBadges eventId={eventId} showLocked={true} />
           </div>
+        )}
 
-          {/* Description */}
-          {event.description && (
-            <div className="prose max-w-none">
-              <p className="text-gray-700 text-lg">{event.description}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Rules */}
-      {/* {rules.length > 0 && (
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center">
-            <Info className="h-6 w-6 mr-2 text-blue-600" />
-            Luật chơi
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {rules.map((rule) => (
-              <div
-                key={rule.id}
-                className="border border-gray-200 rounded-lg p-4"
-              >
-                <h3 className="font-semibold text-gray-900 mb-2">
-                  {rule.name}
-                </h3>
-                <p className="text-sm text-gray-600">{rule.description}</p>
-              </div>
-            ))}
+        {/* CTA for non-participants */}
+        {!isParticipating && !isEnded && (
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 text-center">
+            <Trophy className="h-16 w-16 text-white mx-auto mb-4 opacity-90" />
+            <h3 className="text-2xl font-bold text-white mb-2">
+              Tham gia để xem bảng xếp hạng
+            </h3>
+            <p className="text-blue-100 mb-6">
+              Theo dõi tiến độ, cạnh tranh với bạn bè và nhận huy hiệu
+            </p>
+            <button
+              onClick={handleJoinClick}
+              className="px-8 py-3 bg-white text-blue-600 font-bold rounded-xl hover:bg-gray-100 transition-colors shadow-lg"
+            >
+              Tham gia ngay
+            </button>
           </div>
-        </div>
-      )} */}
-
-      {/* Progress */}
-      <MinActiveDaysProgress eventId={eventId} />
-
-      {/* Leaderboard */}
-      {/* <EventLeaderboard eventId={eventId} /> */}
-
-      {/* User's badges */}
-      {/* <UserBadges eventId={eventId} showLocked={true} /> */}
-      {/* Teams List (for team events) */}
-      {event.event_type === "team" && teams.length > 0 && (
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Các đội tham gia
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {teams.map((team) => (
-              <div
-                key={team.id}
-                className="border border-gray-200 rounded-lg p-4"
-              >
-                <h3 className="font-bold text-gray-900 mb-2">{team.name}</h3>
-                <p className="text-sm text-gray-600">
-                  Đội trưởng: {team.users.username}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Điểm: {team.total_points.toFixed(2)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {/* Event Statistics */}
-      {event && (
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">
-            Thống kê sự kiện
-          </h2>
-          <EventStatistics eventId={eventId} eventType={event.event_type} />
-        </div>
-      )}
-      {/* Dashboard */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Bảng xếp hạng</h2>
-        <EventDashboard eventId={eventId} eventType={event.event_type} />
+        )}
       </div>
 
       {/* Join Modal */}
@@ -309,15 +424,81 @@ export default function EventDetailPage() {
           onClose={() => setShowJoinModal(false)}
           onSuccess={() => {
             setShowJoinModal(false);
-            setIsParticipating(true);
             loadEvent();
           }}
         />
       )}
+
+      {/* Tracklog Modal */}
+      <UserTracklogModal
+        eventId={eventId}
+        userId={tracklogModal.userId}
+        userName={tracklogModal.userName}
+        isOpen={tracklogModal.isOpen}
+        onClose={handleCloseTracklog}
+      />
     </div>
   );
 }
 
+// Helper functions
+function getRuleIcon(ruleType: string) {
+  switch (ruleType) {
+    case "daily_increase_individual":
+      return "📈";
+    case "daily_increase_team":
+      return "👥";
+    case "min_participants":
+      return "🎯";
+    case "pace_range":
+      return "⚡";
+    case "multiplier_day":
+      return "✖️";
+    case "time_range":
+      return "⏰";
+    case "min_active_days":
+      return "📅";
+    default:
+      return "📋";
+  }
+}
+
+function formatRuleConfig(rule: any) {
+  const config = rule.config as any;
+
+  switch (rule.rule_type) {
+    case "daily_increase_individual":
+      return `Tăng ${config.increase_km} km mỗi ngày`;
+    case "daily_increase_team":
+      return `Đội tăng ${config.team_increase_km} km mỗi ngày`;
+    case "min_participants":
+      return `Tối thiểu ${config.min_participants} người/ngày`;
+    case "pace_range":
+      return `Pace: ${config.min_pace} - ${config.max_pace} phút/km`;
+    case "multiplier_day":
+      const days = [
+        "Chủ nhật",
+        "Thứ 2",
+        "Thứ 3",
+        "Thứ 4",
+        "Thứ 5",
+        "Thứ 6",
+        "Thứ 7",
+      ];
+      return `${days[config.multiplier_day]} x${config.multiplier}`;
+    case "time_range":
+      return `${config.start_time} - ${config.end_time}`;
+    case "min_active_days":
+      const percentage = config.min_percentage?.toFixed(0) || "67";
+      const grace = config.grace_days || 0;
+      const graceText = grace > 0 ? `, cho phép nghỉ ${grace} ngày` : "";
+      return `Cần ${percentage}% ngày có tracklog${graceText}`;
+    default:
+      return "";
+  }
+}
+
+// Join Modal Component
 function JoinEventModal({
   event,
   teams,
@@ -339,22 +520,18 @@ function JoinEventModal({
   const handleJoin = async () => {
     if (!user) return;
 
-    setError("");
     setLoading(true);
+    setError("");
 
     try {
-      // Check password
+      // Validate password
       if (event.password && password !== event.password) {
-        setError("Mật khẩu không đúng!");
-        setLoading(false);
-        return;
+        throw new Error("Mật khẩu không đúng");
       }
 
-      // Check team selection for team events
+      // Validate team selection
       if (event.event_type === "team" && !selectedTeam) {
-        setError("Vui lòng chọn đội!");
-        setLoading(false);
-        return;
+        throw new Error("Vui lòng chọn đội");
       }
 
       // Add to event_participants
@@ -395,14 +572,14 @@ function JoinEventModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl transform transition-all">
         <h3 className="text-2xl font-bold text-gray-900 mb-4">
           Tham gia sự kiện
         </h3>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
             {error}
           </div>
         )}
@@ -448,14 +625,14 @@ function JoinEventModal({
         <div className="flex items-center space-x-3">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50"
+            className="flex-1 px-4 py-2 border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
           >
             Hủy
           </button>
           <button
             onClick={handleJoin}
             disabled={loading}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 transition-all"
           >
             {loading ? "Đang xử lý..." : "Tham gia"}
           </button>
@@ -464,6 +641,8 @@ function JoinEventModal({
     </div>
   );
 }
+
+// Statistics Component
 function EventStatistics({
   eventId,
   eventType,
@@ -556,60 +735,105 @@ function EventStatistics({
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-      <div className="text-center">
-        <div className="text-4xl font-bold text-blue-600 mb-2">
-          {stats.totalParticipants}
-        </div>
-        <div className="text-sm text-gray-600">Người tham gia</div>
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          icon={<Users className="h-6 w-6" />}
+          value={stats.totalParticipants}
+          label="Người tham gia"
+          color="blue"
+        />
+        <StatCard
+          icon={<ActivityIcon className="h-6 w-6" />}
+          value={stats.totalDistance.toFixed(1)}
+          label="Tổng km"
+          color="green"
+        />
+        <StatCard
+          icon={<Trophy className="h-6 w-6" />}
+          value={stats.totalPoints.toFixed(0)}
+          label="Tổng điểm"
+          color="purple"
+        />
+        <StatCard
+          icon={<TrendingUp className="h-6 w-6" />}
+          value={stats.totalActivities}
+          label="Hoạt động"
+          color="orange"
+        />
       </div>
 
-      <div className="text-center">
-        <div className="text-4xl font-bold text-green-600 mb-2">
-          {stats.totalDistance.toFixed(1)}
-        </div>
-        <div className="text-sm text-gray-600">Tổng km</div>
-      </div>
-
-      <div className="text-center">
-        <div className="text-4xl font-bold text-purple-600 mb-2">
-          {stats.totalPoints.toFixed(0)}
-        </div>
-        <div className="text-sm text-gray-600">Tổng điểm</div>
-      </div>
-
-      <div className="text-center">
-        <div className="text-4xl font-bold text-orange-600 mb-2">
-          {stats.totalActivities}
-        </div>
-        <div className="text-sm text-gray-600">Hoạt động</div>
-      </div>
-
-      {stats.averagePace > 0 && (
-        <div className="col-span-2 md:col-span-4 mt-4 p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-sm text-gray-600">Pace trung bình: </span>
-              <span className="text-lg font-bold text-gray-900">
+      {/* Additional Stats */}
+      {(stats.averagePace > 0 || stats.topRunner) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {stats.averagePace > 0 && (
+            <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl">
+              <div className="text-sm text-blue-600 font-medium mb-1">
+                Pace trung bình
+              </div>
+              <div className="text-2xl font-bold text-blue-900">
                 {Math.floor(stats.averagePace)}:
                 {Math.round((stats.averagePace % 1) * 60)
                   .toString()
                   .padStart(2, "0")}{" "}
-                /km
-              </span>
-            </div>
-            {stats.topRunner && (
-              <div>
-                <span className="text-sm text-gray-600">Top runner: </span>
-                <span className="text-lg font-bold text-gray-900">
-                  {stats.topRunner.username} (
-                  {stats.topRunner.distance.toFixed(1)} km)
-                </span>
+                <span className="text-lg">/km</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+          {stats.topRunner && (
+            <div className="p-4 bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-200 rounded-xl">
+              <div className="text-sm text-yellow-600 font-medium mb-1">
+                Top runner
+              </div>
+              <div className="text-2xl font-bold text-yellow-900">
+                {stats.topRunner.username}
+              </div>
+              <div className="text-sm text-yellow-700">
+                {stats.topRunner.distance.toFixed(1)} km
+              </div>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Stat Card Component
+function StatCard({
+  icon,
+  value,
+  label,
+  color,
+}: {
+  icon: React.ReactNode;
+  value: string | number;
+  label: string;
+  color: "blue" | "green" | "purple" | "orange";
+}) {
+  const colorClasses = {
+    blue: "from-blue-50 to-blue-100 border-blue-200 text-blue-600",
+    green: "from-green-50 to-green-100 border-green-200 text-green-600",
+    purple: "from-purple-50 to-purple-100 border-purple-200 text-purple-600",
+    orange: "from-orange-50 to-orange-100 border-orange-200 text-orange-600",
+  };
+
+  const valueColorClasses = {
+    blue: "text-blue-900",
+    green: "text-green-900",
+    purple: "text-purple-900",
+    orange: "text-orange-900",
+  };
+
+  return (
+    <div
+      className={`p-4 bg-gradient-to-br ${colorClasses[color]} border rounded-xl text-center transform hover:scale-105 transition-all`}
+    >
+      <div className="flex justify-center mb-2">{icon}</div>
+      <div className={`text-3xl font-bold ${valueColorClasses[color]} mb-1`}>
+        {value}
+      </div>
+      <div className="text-sm text-gray-600 font-medium">{label}</div>
     </div>
   );
 }

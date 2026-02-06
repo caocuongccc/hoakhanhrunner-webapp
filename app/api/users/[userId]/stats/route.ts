@@ -1,6 +1,7 @@
 // app/api/users/[userId]/stats/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { formatDuration, formatTime } from "@/lib/utils";
 
 /**
  * GET /api/users/[userId]/stats
@@ -9,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 export async function GET(
   request: NextRequest,
   // { params }: { params: { userId: string } }
-  context: { params: Promise<{ userId: string }> }
+  context: { params: Promise<{ userId: string }> },
 ) {
   try {
     const userId = (await context.params).userId;
@@ -87,7 +88,7 @@ export async function GET(
     console.error("Stats API error:", error);
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -126,15 +127,15 @@ function getDateRange(period: string): { start: string; end: string } {
 function calculateStats(activities: any[]) {
   const totalDistance = activities.reduce(
     (sum, a) => sum + (a.distance || 0),
-    0
+    0,
   );
   const totalTime = activities.reduce(
     (sum, a) => sum + (a.moving_time || 0),
-    0
+    0,
   );
   const totalElevation = activities.reduce(
     (sum, a) => sum + (a.total_elevation_gain || 0),
-    0
+    0,
   );
 
   // Calculate average pace (min/km)
@@ -146,7 +147,7 @@ function calculateStats(activities: any[]) {
   // Find longest run
   const longestRun = activities.reduce(
     (max, a) => (a.distance > max.distance ? a : max),
-    { distance: 0, name: "", start_date_local: "" }
+    { distance: 0, name: "", start_date_local: "" },
   );
 
   // Find fastest pace
@@ -154,7 +155,7 @@ function calculateStats(activities: any[]) {
     .filter((a) => a.average_speed > 0)
     .reduce(
       (fastest, a) => (a.average_speed > fastest.average_speed ? a : fastest),
-      { average_speed: 0, name: "", start_date_local: "" }
+      { average_speed: 0, name: "", start_date_local: "" },
     );
 
   const fastestPaceSeconds =
@@ -188,7 +189,7 @@ function calculateStats(activities: any[]) {
       pace:
         fastestPaceSeconds > 0
           ? `${Math.floor(fastestPaceSeconds / 60)}:${Math.floor(
-              fastestPaceSeconds % 60
+              fastestPaceSeconds % 60,
             )
               .toString()
               .padStart(2, "0")}`
@@ -209,27 +210,6 @@ function getEmptyStats() {
     longestRun: { distance: "0.00", name: "", date: "" },
     fastestPace: { pace: "N/A", name: "", date: "" },
   };
-}
-
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
-}
-
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  }
-  return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
 function sortPRsByDistance(prs: any[]): any[] {

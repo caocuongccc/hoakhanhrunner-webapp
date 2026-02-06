@@ -10,12 +10,14 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createSupabaseClient();
     const { searchParams } = new URL(request.url);
-
-    const userId = searchParams.get("userId");
     const eventId = searchParams.get("eventId");
     const showLocked = searchParams.get("showLocked") === "true";
 
     // Get current user if userId not specified
+
+    const cookieStore = await cookies();
+    const userId = cookieStore.get("user_id")?.value;
+
     let targetUserId = userId;
     if (!targetUserId) {
       const {
