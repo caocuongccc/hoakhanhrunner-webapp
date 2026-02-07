@@ -40,6 +40,9 @@ export default function EventDetailPage() {
   const [rules, setRules] = useState<any[]>([]);
   const [showJoinModal, setShowJoinModal] = useState(false);
 
+  // NEW: Track auth loading state
+  const [authChecked, setAuthChecked] = useState(false);
+
   const [tracklogModal, setTracklogModal] = useState<{
     isOpen: boolean;
     userId: string;
@@ -53,6 +56,37 @@ export default function EventDetailPage() {
   useEffect(() => {
     loadEvent();
   }, [eventId]);
+
+  // FIXED: Check participation when user state changes
+  useEffect(() => {
+    if (user && event) {
+      checkParticipation();
+    }
+    setAuthChecked(true);
+  }, [user, event]); // Re-run when user or event changes
+
+  // NEW: Separate function to check participation
+  const checkParticipation = async () => {
+    if (!user || !event) return;
+
+    try {
+      const { data: participant, error } = await supabase
+        .from("event_participants")
+        .select("*")
+        .eq("event_id", eventId)
+        .eq("user_id", user.id)
+        .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when not found
+
+      if (error) {
+        console.error("Error checking participation:", error);
+        return;
+      }
+
+      setIsParticipating(!!participant);
+    } catch (error) {
+      console.error("Error checking participation:", error);
+    }
+  };
 
   const loadEvent = async () => {
     try {
@@ -132,7 +166,7 @@ export default function EventDetailPage() {
     });
   };
 
-  if (loading) {
+  if (loading || !authChecked) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -425,6 +459,7 @@ export default function EventDetailPage() {
           onSuccess={() => {
             setShowJoinModal(false);
             loadEvent();
+            checkParticipation(); // Re-check after joining
           }}
         />
       )}
