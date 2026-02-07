@@ -39,8 +39,9 @@ export async function GET(
       .from("activities")
       .select("*")
       .eq("event_id", eventId)
-      .eq("user_id", userId);
-    //.order("activity_date", { ascending: false });
+      .eq("user_id", userId)
+      //.order("activity_date", { ascending: false });
+      .order("activity_date", { ascending: false });
     if (activitiesError) {
       return NextResponse.json(
         { error: "Failed to fetch activities" },
