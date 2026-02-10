@@ -22,7 +22,6 @@ export async function GET(
     const eventId = params.id;
     const cookieStore = await cookies();
     const userId = cookieStore.get("user_id")?.value;
-    console.log("User ID from cookies:", userId);
     if (!userId) {
       return NextResponse.json(
         {
@@ -73,7 +72,6 @@ export async function GET(
     const minActiveDaysRule = event.event_rules?.find(
       (er: any) => er.rules?.rule_type === "min_active_days",
     );
-    console.log("Min Active Days Rule:", minActiveDaysRule);
     if (!minActiveDaysRule) {
       return NextResponse.json({
         hasRule: false,
@@ -88,7 +86,6 @@ export async function GET(
       new Date(event.end_date),
       minActiveDaysRule.rules.config as any,
     );
-
     const message = getMinActiveDaysMessage(validationResult);
 
     // Determine badge

@@ -33,6 +33,7 @@ export function validateMinActiveDays(
   ruleConfig: MinActiveDaysConfig,
 ): ValidationResult {
   // Calculate total event days (inclusive)
+
   const totalDays =
     Math.ceil(
       (eventEndDate.getTime() - eventStartDate.getTime()) /
@@ -42,7 +43,7 @@ export function validateMinActiveDays(
   // Get unique days with activities
   const uniqueDays = new Set(
     activities.map((activity) => {
-      const activityDate = new Date(activity.start_date);
+      const activityDate = new Date(activity.activity_date);
       return activityDate.toISOString().split("T")[0];
     }),
   );

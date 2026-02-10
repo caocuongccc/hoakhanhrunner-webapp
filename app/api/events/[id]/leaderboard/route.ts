@@ -72,7 +72,7 @@ export async function GET(
       },
       {} as Record<string, any>,
     );
-
+    console.log(`Fetched ${users?.length || 0} users for leaderboard`);
     // Get badges for each user
     const { data: userBadges } = await supabase
       .from("user_badges")
