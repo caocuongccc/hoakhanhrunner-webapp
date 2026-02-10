@@ -1,26 +1,10 @@
-// Fix #2: Fixed penalties-streaks API route
 // app/api/events/[id]/penalties-streaks/route.ts
+// FIXED VERSION: Use activity_date instead of start_date
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { createSupabaseClient } from "@/lib/supabase";
-
-// function createSupabaseClient() {
-//   const cookieStore = cookies();
-//   const authToken = cookieStore.get('sb-access-token')?.value ||
-//                     cookieStore.get('sb-auth-token')?.value;
-
-//   return createClient(
-//     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-//     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-//     {
-//       global: {
-//         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-//       },
-//     }
-//   );
-// }
 
 export async function GET(
   request: NextRequest,
@@ -56,8 +40,6 @@ export async function GET(
     }
 
     // Calculate penalty manually instead of using RPC
-    // (in case RPC function has issues)
-
     // 1. Get penalty rule config
     const { data: penaltyRules } = await supabase
       .from("event_rules")
@@ -84,34 +66,43 @@ export async function GET(
     let penaltyData = { has_penalty_rule: false };
 
     if (penaltyConfig) {
+      // Parse dates properly
       const startDate = new Date(event.start_date);
       const endDate = new Date(event.end_date);
+
+      // Calculate total days (inclusive)
       const totalDays =
         Math.floor(
           (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
         ) + 1;
 
-      // Count unique active days
+      // ✅ FIX: Use activity_date instead of start_date
       const { data: activities } = await supabase
         .from("activities")
-        .select("start_date")
+        .select("activity_date")
         .eq("event_id", eventId)
         .eq("user_id", userId)
-        .gte("start_date", event.start_date) // ✅ Filter start
-        .lte("start_date", event.end_date); // ✅ Filter end
+        .gte("activity_date", event.start_date.split("T")[0]) // Date only comparison
+        .lte("activity_date", event.end_date.split("T")[0]); // Date only comparison
 
-      // Count UNIQUE days (CRITICAL!)
+      // ✅ FIX: activity_date is already YYYY-MM-DD string, no need to parse
       const uniqueDays = new Set(
-        (activities || []).map((a) => {
-          const date = new Date(a.start_date);
-          return date.toISOString().split("T")[0]; // YYYY-MM-DD
-        }),
+        (activities || []).map((a) => a.activity_date),
       );
 
       const activeDays = uniqueDays.size;
       const missedDays = totalDays - activeDays;
       const penaltyPerDay = penaltyConfig.penalty_per_day || 50000;
       const penaltyAmount = missedDays * penaltyPerDay;
+
+      console.log(`📊 Penalty calculation:`, {
+        eventId,
+        userId,
+        totalDays,
+        activeDays,
+        missedDays,
+        uniqueDates: Array.from(uniqueDays),
+      });
 
       penaltyData = {
         has_penalty_rule: true,
@@ -127,10 +118,10 @@ export async function GET(
     // 3. Calculate streak manually
     const { data: activities } = await supabase
       .from("activities")
-      .select("start_date")
+      .select("activity_date")
       .eq("event_id", eventId)
       .eq("user_id", userId)
-      .order("start_date", { ascending: true });
+      .order("activity_date", { ascending: true });
 
     let streakData = {
       current_streak: 0,
@@ -139,14 +130,9 @@ export async function GET(
     };
 
     if (activities && activities.length > 0) {
-      // Get unique dates sorted
+      // Get unique dates sorted (already in YYYY-MM-DD format)
       const dates = Array.from(
-        new Set(
-          activities.map((a) => {
-            const date = new Date(a.start_date);
-            return date.toISOString().split("T")[0];
-          }),
-        ),
+        new Set(activities.map((a) => a.activity_date)),
       ).sort();
 
       let currentStreak = 1;

@@ -40,7 +40,7 @@ export default function DualLeaderboard({ eventId }: DualLeaderboardProps) {
     try {
       const response = await fetch(`/api/events/${eventId}/dual-leaderboard`);
       const data = await response.json();
-
+      console.log("Fetched leaderboard data:", data);
       setEnduranceRanking(data.endurance || []);
       setConsistencyRanking(data.consistency || []);
     } catch (error) {

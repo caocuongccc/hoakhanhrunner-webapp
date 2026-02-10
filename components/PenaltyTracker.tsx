@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertCircle, DollarSign, Calendar, TrendingDown } from "lucide-react";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 interface PenaltyData {
   has_penalty_rule: boolean;
@@ -17,11 +18,15 @@ interface PenaltyData {
 type PenaltyTrackerProps = {
   eventId: string;
   userId?: string;
+  isExpanded: boolean;
+  onToggle: () => void;
 };
 
 export default function PenaltyTracker({
   eventId,
   userId,
+  isExpanded,
+  onToggle,
 }: PenaltyTrackerProps) {
   const [penalty, setPenalty] = useState<PenaltyData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,44 +69,43 @@ export default function PenaltyTracker({
   const hasPenalty = penalty.missed_days > 0;
 
   return (
-    <div
-      className={`rounded-xl shadow-lg overflow-hidden border-2 ${hasPenalty ? "border-red-300 bg-gradient-to-br from-red-50 to-orange-50" : "border-green-300 bg-gradient-to-br from-green-50 to-emerald-50"}`}
+    <CollapsibleSection
+      title={hasPenalty ? "Phạt tiền ngày nghỉ" : "Không bị phạt!"}
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+      headerColor={
+        hasPenalty
+          ? "from-red-50 to-orange-50 border-red-300"
+          : "from-green-50 to-emerald-50 border-green-300"
+      }
+      icon={
+        hasPenalty ? (
+          <AlertCircle className="h-5 w-5 text-red-600" />
+        ) : (
+          <DollarSign className="h-5 w-5 text-green-600" />
+        )
+      }
+      iconBg={hasPenalty ? "bg-red-100" : "bg-green-100"}
     >
-      <div
-        className={`p-4 ${hasPenalty ? "bg-gradient-to-r from-red-600 to-orange-600" : "bg-gradient-to-r from-green-600 to-emerald-600"}`}
-      >
-        <div className="flex items-center space-x-3 text-white">
-          {hasPenalty ? (
-            <AlertCircle className="h-6 w-6" />
-          ) : (
-            <DollarSign className="h-6 w-6" />
-          )}
-          <div>
-            <h3 className="text-lg font-bold">
-              {hasPenalty ? "Phạt tiền ngày nghỉ" : "Không bị phạt!"}
-            </h3>
-            <p className="text-sm opacity-90">Quỹ "Lẩu tất niên/tân niên"</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-6 space-y-4">
+      {/* ===== CONTENT ===== */}
+      <div className="space-y-4">
+        {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
-          <div className="text-center p-3 bg-white rounded-lg border border-gray-200">
+          <div className="text-center p-3 bg-white rounded-lg border">
             <Calendar className="h-5 w-5 text-blue-600 mx-auto mb-1" />
-            <div className="text-2xl font-bold text-gray-900">
-              {penalty.total_days}
-            </div>
+            <div className="text-2xl font-bold">{penalty.total_days}</div>
             <div className="text-xs text-gray-600">Tổng ngày</div>
           </div>
-          <div className="text-center p-3 bg-white rounded-lg border border-gray-200">
+
+          <div className="text-center p-3 bg-white rounded-lg border">
             <Calendar className="h-5 w-5 text-green-600 mx-auto mb-1" />
             <div className="text-2xl font-bold text-green-600">
               {penalty.active_days}
             </div>
             <div className="text-xs text-gray-600">Đã chạy</div>
           </div>
-          <div className="text-center p-3 bg-white rounded-lg border border-gray-200">
+
+          <div className="text-center p-3 bg-white rounded-lg border">
             <TrendingDown className="h-5 w-5 text-red-600 mx-auto mb-1" />
             <div className="text-2xl font-bold text-red-600">
               {penalty.missed_days}
@@ -110,59 +114,63 @@ export default function PenaltyTracker({
           </div>
         </div>
 
-        <div className="p-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
-          <div className="flex items-center justify-between mb-2">
+        {/* Penalty detail */}
+        <div className="p-4 bg-white rounded-lg border-2 border-dashed">
+          <div className="flex justify-between mb-2">
             <span className="text-sm text-gray-600">Mỗi ngày nghỉ:</span>
-            <span className="font-semibold text-gray-900">
+            <span className="font-semibold">
               {penalty.penalty_per_day.toLocaleString("vi-VN")}{" "}
               {penalty.currency}
             </span>
           </div>
-          <div className="flex items-center justify-between mb-2">
+
+          <div className="flex justify-between mb-2">
             <span className="text-sm text-gray-600">Số ngày nghỉ:</span>
-            <span className="font-semibold text-gray-900">
-              {penalty.missed_days} ngày
-            </span>
+            <span className="font-semibold">{penalty.missed_days} ngày</span>
           </div>
-          <div className="border-t border-gray-300 pt-2 mt-2">
-            <div className="flex items-center justify-between">
-              <span className="text-base font-bold text-gray-900">
-                Tổng phạt:
-              </span>
-              <span
-                className={`text-2xl font-bold ${hasPenalty ? "text-red-600" : "text-green-600"}`}
-              >
-                {penalty.penalty_amount.toLocaleString("vi-VN")}{" "}
-                {penalty.currency}
-              </span>
-            </div>
+
+          <div className="border-t pt-2 mt-2 flex justify-between">
+            <span className="font-bold">Tổng phạt:</span>
+            <span
+              className={`text-2xl font-bold ${
+                hasPenalty ? "text-red-600" : "text-green-600"
+              }`}
+            >
+              {penalty.penalty_amount.toLocaleString("vi-VN")}{" "}
+              {penalty.currency}
+            </span>
           </div>
         </div>
 
+        {/* Message */}
         <div
-          className={`text-center p-4 rounded-lg ${hasPenalty ? "bg-red-100 border border-red-200" : "bg-green-100 border border-green-200"}`}
+          className={`text-center p-4 rounded-lg ${
+            hasPenalty
+              ? "bg-red-100 border border-red-200"
+              : "bg-green-100 border border-green-200"
+          }`}
         >
           {hasPenalty ? (
-            <div>
-              <p className="font-bold mb-1 text-red-800">
+            <>
+              <p className="font-bold text-red-800 mb-1">
                 💰 Vui lòng đóng góp quỹ "Lẩu tất niên"
               </p>
               <p className="text-sm text-red-700">
-                Số tiền sẽ được sử dụng cho bữa tiệc kết thúc sự kiện
+                Số tiền sẽ dùng cho bữa tiệc kết thúc sự kiện
               </p>
-            </div>
+            </>
           ) : (
-            <div>
+            <>
               <p className="font-bold text-green-800 mb-1">
                 🎉 Xuất sắc! Không bị phạt
               </p>
               <p className="text-sm text-green-700">
                 Bạn đã chạy đủ {penalty.active_days}/{penalty.total_days} ngày
               </p>
-            </div>
+            </>
           )}
         </div>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }

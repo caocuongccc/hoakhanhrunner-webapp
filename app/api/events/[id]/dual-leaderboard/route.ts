@@ -1,5 +1,5 @@
 // app/api/events/[id]/dual-leaderboard/route.ts
-// FIXED VERSION - Better error handling and data fetching
+// FIXED VERSION - Query correct fields from public.users table
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -15,7 +15,6 @@ export async function GET(
     );
 
     const params = await context.params;
-    console.log("Fetching dual leaderboard for event ID:", params.id);
     const eventId = params.id;
 
     console.log("Fetching leaderboard for event:", eventId);
@@ -47,37 +46,51 @@ export async function GET(
       });
     }
 
-    // STEP 2: Get user details
+    // STEP 2: Get user details from public.users table
     const userIds = participants.map((p) => p.user_id);
 
+    // ✅ FIX: Query correct fields from public.users table
+    // Available fields: id, username, email, avatar_url, full_name, bio, strava_id
     const { data: users, error: usersError } = await supabase
       .from("users")
-      .select("id, username, email, raw_user_meta_data")
+      .select("id, username, email, avatar_url, full_name")
       .in("id", userIds);
 
     if (usersError) {
       console.error("Error fetching users:", usersError);
-      // Continue without user details
+      console.error("⚠️ Check RLS policies on public.users table");
+      console.error("Run: psql -d your_db < fix_users_rls.sql");
+
+      // Continue without user details as fallback
     }
 
     console.log(`Found ${users?.length || 0} user details`);
 
-    // Create user map
+    // ✅ FIX: Create user map with correct fields
     const userMap = (users || []).reduce(
       (acc, user) => {
         acc[user.id] = {
           username:
             user.username ||
-            user.raw_user_meta_data?.full_name ||
-            user.raw_user_meta_data?.username ||
+            user.full_name ||
             user.email?.split("@")[0] ||
-            "User",
-          avatar: user.raw_user_meta_data?.avatar_url,
+            `User ${user.id.slice(0, 8)}`,
+          avatar: user.avatar_url || null, // ✅ Use avatar_url field
         };
         return acc;
       },
       {} as Record<string, any>,
     );
+
+    // Add fallback for users not found in query
+    userIds.forEach((id) => {
+      if (!userMap[id]) {
+        userMap[id] = {
+          username: `User ${id.slice(0, 8)}`,
+          avatar: null,
+        };
+      }
+    });
 
     // STEP 3: Get streaks
     const { data: streaks, error: streaksError } = await supabase
@@ -106,10 +119,7 @@ export async function GET(
 
     // STEP 4: Build endurance leaderboard (sorted by total_km)
     const endurance = participants.map((p) => {
-      const userInfo = userMap[p.user_id] || {
-        username: "Unknown User",
-        avatar: null,
-      };
+      const userInfo = userMap[p.user_id];
       const streak = streakMap[p.user_id] || { longest: 0, current: 0 };
 
       return {
@@ -142,6 +152,7 @@ export async function GET(
         participantsCount: participants.length,
         usersFound: users?.length || 0,
         streaksFound: streaks?.length || 0,
+        hasUserData: users && users.length > 0,
       },
     });
   } catch (error: any) {
@@ -152,6 +163,7 @@ export async function GET(
         consistency: [],
         error: error.message,
         stack: error.stack,
+        hint: "Check if public.users table has RLS policies. Run fix_users_rls.sql",
       },
       { status: 500 },
     );

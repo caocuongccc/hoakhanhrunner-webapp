@@ -916,6 +916,9 @@ export default function EventDetailPageComplete() {
   const [authChecked, setAuthChecked] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
   const [rules, setRules] = useState<any[]>([]);
+
+  const [open, setOpen] = useState(true);
+
   const [activeTab, setActiveTab] = useState<
     "overview" | "rules" | "leaderboard" | "dashboard"
   >("overview");
@@ -1258,7 +1261,12 @@ export default function EventDetailPageComplete() {
 
               {/* Penalty Summary */}
               {user && isParticipating && (
-                <PenaltyTracker eventId={eventId} userId={user.id} />
+                <PenaltyTracker
+                  eventId={eventId}
+                  userId={user.id}
+                  isExpanded={open}
+                  onToggle={() => setOpen(!open)}
+                />
               )}
             </div>
           )}
