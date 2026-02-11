@@ -1181,7 +1181,7 @@ export default function EventDetailPageComplete() {
           {activeTab === "overview" && (
             <div className="space-y-6">
               {/* Quick Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard
                   icon={<Users className="h-6 w-6" />}
                   label="Người tham gia"
@@ -1292,7 +1292,12 @@ export default function EventDetailPageComplete() {
               </div>
 
               {/* Penalty Tracker */}
-              <PenaltyTracker eventId={eventId} userId={user.id} />
+              <PenaltyTracker
+                eventId={eventId}
+                userId={user.id}
+                isExpanded={open}
+                onToggle={() => setOpen(!open)}
+              />
             </div>
           )}
         </div>

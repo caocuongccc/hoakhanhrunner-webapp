@@ -13,6 +13,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Download,
 } from "lucide-react";
 import { createSupabaseClient, Event } from "@/lib/supabase";
 import { format } from "date-fns";
@@ -58,7 +59,7 @@ export default function AdminEventsPage() {
 
   const updateEventStatus = async (
     eventId: string,
-    newStatus: "pending" | "active" | "completed" | "cancelled"
+    newStatus: "pending" | "active" | "completed" | "cancelled",
   ) => {
     try {
       const { error } = await supabase
@@ -126,6 +127,25 @@ export default function AdminEventsPage() {
         <span>{badge.label}</span>
       </span>
     );
+  };
+
+  const downloadCSV = async (eventId: string) => {
+    try {
+      const res = await fetch(
+        `/api/events/${eventId}/export?format=csv&type=all`,
+      );
+      if (!res.ok) throw new Error("Failed" + res.statusText);
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `event_${eventId}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert("❌ Error downloading JSON: " + e.message);
+    }
   };
 
   return (
@@ -238,7 +258,7 @@ export default function AdminEventsPage() {
                         {format(
                           new Date(event.start_date),
                           "dd/MM/yyyy HH:mm",
-                          { locale: vi }
+                          { locale: vi },
                         )}
                         {" - "}
                         {format(new Date(event.end_date), "dd/MM/yyyy HH:mm", {
@@ -306,6 +326,10 @@ export default function AdminEventsPage() {
                     title="Xóa"
                   >
                     <Trash2 className="h-5 w-5" />
+                  </button>
+
+                  <button onClick={() => downloadCSV(event.id)}>
+                    <Download className="h-5 w-5" />
                   </button>
                 </div>
               </div>
