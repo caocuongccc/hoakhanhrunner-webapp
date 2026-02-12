@@ -12,6 +12,46 @@ const supabase = createClient(
   },
 );
 
+// ==========================================
+// SAFE DATE EXTRACTION HELPERS
+// ==========================================
+
+/**
+ * Safely extract date part (YYYY-MM-DD) from any date string format
+ */
+function extractDateOnly(dateString) {
+  if (!dateString) return "";
+
+  const dateStr = String(dateString);
+
+  // If contains "T", split by it
+  if (dateStr.includes("T")) {
+    return dateStr.split("T")[0];
+  }
+
+  // If no "T", assume it's already YYYY-MM-DD or extract first 10 chars
+  // This handles edge cases like "2026-02-11 00:00:00" (space instead of T)
+  if (dateStr.includes(" ")) {
+    return dateStr.split(" ")[0];
+  }
+
+  // Take first 10 characters (YYYY-MM-DD)
+  return dateStr.substring(0, 10);
+}
+
+/**
+ * Check if date is in range (inclusive)
+ */
+function isDateInRange(date, startDate, endDate) {
+  const d = extractDateOnly(date);
+  const start = extractDateOnly(startDate);
+  const end = extractDateOnly(endDate);
+
+  if (!d || !start || !end) return false;
+
+  return d >= start && d <= end;
+}
+
 async function refreshStravaToken(refreshToken) {
   const response = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
@@ -112,7 +152,6 @@ async function saveBestEfforts(userId, activityId, bestEfforts) {
     }
   }
 }
-
 
 async function updateParticipantStats(eventId, userId) {
   try {
@@ -323,7 +362,7 @@ async function syncToEventActivitiesV2(userId, activity) {
     }
 
     let syncedCount = 0;
-    const results: any[] = [];
+    const results = [];
 
     for (const participation of participations) {
       const event = participation.events;
@@ -464,7 +503,7 @@ async function syncToEventActivitiesV2(userId, activity) {
       synced: syncedCount,
       results,
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Fatal error in syncToEventActivities:", error);
     return {
       success: false,
