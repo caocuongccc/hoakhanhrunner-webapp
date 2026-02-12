@@ -1,6 +1,9 @@
 // api/strava-webhook.js - FIXED DATE COMPARISON
 import { createClient } from "@supabase/supabase-js";
-// import { syncToEventActivitiesV2 } from "../../lib/sync-helpers.js";
+const {
+  calculateActivityPoints,
+  validateBlockingRules,
+} = require("./points-calculator");
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -345,12 +348,24 @@ async function syncToEventActivitiesV2(userId, activity) {
 
     console.log(`🔍 Syncing activity ${activity.id} (${activityDate})`);
 
-    // Get user's event participations
+    // 🎯 STEP 1: Get user's event participations WITH RULES
     const { data: participations, error: partError } = await supabase
       .from("event_participants")
-      .select("event_id, events!inner(*)")
+      .select(
+        `
+        event_id, 
+        events!inner(
+          id, 
+          name, 
+          start_date, 
+          end_date,
+          event_rules(
+            rules(*)
+          )
+        )
+      `,
+      )
       .eq("user_id", userId);
-
     if (partError) {
       console.error("❌ Error fetching participations:", partError);
       return { success: false, error: partError.message };
@@ -389,6 +404,52 @@ async function syncToEventActivitiesV2(userId, activity) {
       }
 
       console.log(`   ✅ Match - syncing...`);
+
+      // 🎯 STEP 2: Get event rules
+      const eventRules = (event.event_rules || []).map((er) => ({
+        rule_type: er.rules.rule_type,
+        config: er.rules.config,
+      }));
+
+      console.log(`   📋 Found ${eventRules.length} rules for event`);
+
+      // 🎯 STEP 3: Validate blocking rules (min_distance, pace_range)
+      const blockingValidation = validateBlockingRules(activity, eventRules);
+
+      if (!blockingValidation.isValid) {
+        console.log(`   ❌ Failed blocking rules:`);
+        blockingValidation.failures.forEach((f) => {
+          console.log(`      - ${f.message}`);
+        });
+
+        results.push({
+          eventId,
+          eventName: event.name,
+          action: "blocked",
+          reason: "Failed blocking rules",
+          failures: blockingValidation.failures.map((f) => f.message),
+        });
+        continue; // Skip this event
+      }
+
+      // 🎯 STEP 4: Calculate points with bonuses
+      const pointsCalc = calculateActivityPoints(activity, eventRules);
+
+      console.log(`   📊 Points calculation:`);
+      console.log(`      Base points: ${pointsCalc.basePoints.toFixed(2)}`);
+      if (pointsCalc.appliedBonus) {
+        console.log(
+          `      ✨ Applied bonus: ${pointsCalc.appliedBonus.bonusName} (x${pointsCalc.appliedBonus.multiplier})`,
+        );
+        console.log(`      💬 ${pointsCalc.appliedBonus.message}`);
+      }
+      if (pointsCalc.rejectedBonuses.length > 0) {
+        console.log(`      ⏭️ Rejected bonuses (lower priority):`);
+        pointsCalc.rejectedBonuses.forEach((b) => {
+          console.log(`         - ${b.bonusName} (x${b.multiplier})`);
+        });
+      }
+      console.log(`      Final points: ${pointsCalc.finalPoints.toFixed(2)}`);
 
       // Prepare activity data
       const distanceKm = activity.distance / 1000;
@@ -433,7 +494,11 @@ async function syncToEventActivitiesV2(userId, activity) {
             pace_min_per_km: paceMinPerKm,
             route_data: routeData,
             description: activity.name,
-            points_earned: distanceKm,
+            points_earned: pointsCalc.finalPoints, // ✅ NEW
+            base_points: pointsCalc.basePoints, // ✅ NEW
+            points_multiplier: pointsCalc.appliedBonus?.multiplier || 1, // ✅ NEW
+            bonus_type: pointsCalc.appliedBonus?.bonusType || null, // ✅ NEW
+            bonus_message: pointsCalc.appliedBonus?.message || null, // ✅ NEW
             updated_at: new Date().toISOString(),
           })
           .eq("id", existing.id);
@@ -465,7 +530,11 @@ async function syncToEventActivitiesV2(userId, activity) {
               pace_min_per_km: paceMinPerKm,
               route_data: routeData,
               description: activity.name,
-              points_earned: distanceKm,
+              points_earned: pointsCalc.finalPoints, // ✅ NEW
+              base_points: pointsCalc.basePoints, // ✅ NEW
+              points_multiplier: pointsCalc.appliedBonus?.multiplier || 1, // ✅ NEW
+              bonus_type: pointsCalc.appliedBonus?.bonusType || null, // ✅ NEW
+              bonus_message: pointsCalc.appliedBonus?.message || null, // ✅ NEW
             },
           ]);
 
