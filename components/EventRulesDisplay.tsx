@@ -642,15 +642,6 @@ function BonusPriorityExplanation({ bonusRules }: { bonusRules: Rule[] }) {
 
   return (
     <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 border-2 border-indigo-300">
-      <div className="flex items-center space-x-3 mb-4">
-        <div className="p-2 bg-indigo-600 rounded-lg">
-          <Trophy className="h-6 w-6 text-white" />
-        </div>
-        <h3 className="text-xl font-bold text-gray-900">
-          🎯 Ưu tiên phần thưởng
-        </h3>
-      </div>
-
       <div className="bg-white rounded-xl p-4 mb-4">
         <p className="text-sm text-gray-700 mb-3">
           Khi 1 tracklog đủ điều kiện{" "}
