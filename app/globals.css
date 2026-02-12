@@ -175,3 +175,526 @@ body {
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Mobile CSS Fixes for Event Rules & Bonuses */
+/* Add this to your global CSS or component styles */
+
+/* ============================================= */
+/* RESPONSIVE RULES CONTAINER */
+/* ============================================= */
+
+.rules-container {
+  padding: 1rem;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Collapsible Section Headers */
+.rules-header {
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.rules-header:active {
+  transform: scale(0.98);
+}
+
+/* ============================================= */
+/* RULES CARDS - Mobile Optimized */
+/* ============================================= */
+
+.rule-card {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 2px solid;
+  position: relative;
+}
+
+/* Rule card titles */
+.rule-card h3 {
+  font-size: 1.0625rem; /* 17px */
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+/* Rule card descriptions */
+.rule-card p {
+  font-size: 0.875rem; /* 14px */
+  line-height: 1.5;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+}
+
+/* ============================================= */
+/* BONUS CARDS - Mobile Responsive */
+/* ============================================= */
+
+.bonus-card {
+  padding: 1rem;
+  border-radius: 0.875rem;
+  border: 2px solid;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+/* Yellow/Gold themed bonuses */
+.bonus-card.gold {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #f59e0b;
+}
+
+/* Pink/Red themed bonuses */
+.bonus-card.pink {
+  background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
+  border-color: #ec4899;
+}
+
+/* Priority badge positioning */
+.priority-badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #dc2626;
+  color: white;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem; /* 11px */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.priority-badge.priority-1 {
+  background: #dc2626; /* Red */
+}
+
+.priority-badge.priority-2 {
+  background: #f59e0b; /* Orange */
+}
+
+.priority-badge.priority-3 {
+  background: #10b981; /* Green */
+}
+
+/* ============================================= */
+/* BONUS CONTENT LAYOUT */
+/* ============================================= */
+
+.bonus-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.bonus-icon {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 0.625rem;
+  font-size: 1.5rem;
+}
+
+.bonus-title-wrapper {
+  flex: 1;
+  min-width: 0; /* Allow text truncation */
+}
+
+.bonus-title {
+  font-size: 1rem; /* 16px */
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  line-height: 1.3;
+  color: #1f2937;
+}
+
+.bonus-multiplier {
+  display: inline-block;
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 700;
+  margin-left: 0.375rem;
+}
+
+.bonus-description {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.5;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+}
+
+/* ============================================= */
+/* DISTANCE/VALUE BOXES */
+/* ============================================= */
+
+.value-box {
+  background: white;
+  border: 2px solid;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  margin: 0.5rem 0;
+}
+
+.value-box.gold {
+  border-color: #f59e0b;
+  background: rgba(252, 211, 77, 0.1);
+}
+
+.value-box.green {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.value-box.red {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.value-number {
+  font-size: 1.875rem; /* 30px */
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+
+.value-label {
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  opacity: 0.8;
+}
+
+.value-subtitle {
+  font-size: 0.75rem; /* 12px */
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+/* ============================================= */
+/* DATE/TIME INFO BOXES */
+/* ============================================= */
+
+.info-box {
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 0.625rem;
+  padding: 0.625rem 0.875rem;
+  margin-bottom: 0.5rem;
+  display: inline-block;
+  width: 100%;
+  max-width: 12rem;
+}
+
+.info-box-icon {
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.375rem;
+  vertical-align: middle;
+}
+
+.info-box-label {
+  display: block;
+  font-size: 0.6875rem; /* 11px */
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin-bottom: 0.125rem;
+}
+
+.info-box-value {
+  display: block;
+  font-size: 1rem; /* 16px */
+  font-weight: 700;
+  color: #1f2937;
+}
+
+/* Time range (start - end) */
+.info-box-value.time-range {
+  font-size: 0.9375rem; /* 15px */
+}
+
+/* ============================================= */
+/* PENALTY SECTION */
+/* ============================================= */
+
+.penalty-card {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border: 2px solid #ef4444;
+  border-radius: 0.875rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.penalty-header {
+  font-size: 1.0625rem; /* 17px */
+  font-weight: 700;
+  color: #991b1b;
+  margin-bottom: 0.625rem;
+}
+
+.penalty-amount {
+  font-size: 1.5rem; /* 24px */
+  font-weight: 800;
+  color: #dc2626;
+  margin-bottom: 0.375rem;
+}
+
+.penalty-description {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.5;
+  color: #7c2d12;
+}
+
+/* ============================================= */
+/* STATS GRID */
+/* ============================================= */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.625rem;
+  margin: 0.75rem 0;
+}
+
+.stat-card {
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 0.625rem;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.stat-card.success {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.stat-card.error {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.stat-label {
+  font-size: 0.6875rem; /* 11px */
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin-bottom: 0.25rem;
+}
+
+.stat-value {
+  font-size: 1.5rem; /* 24px */
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* ============================================= */
+/* CHECKMARK / CROSS ICONS */
+/* ============================================= */
+
+.status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.status-icon.success {
+  background: #10b981;
+  color: white;
+}
+
+.status-icon.error {
+  background: #ef4444;
+  color: white;
+}
+
+/* ============================================= */
+/* RESPONSIVE ADJUSTMENTS */
+/* ============================================= */
+
+/* Small phones (< 375px) */
+@media (max-width: 374px) {
+  .bonus-title {
+    font-size: 0.9375rem; /* 15px */
+  }
+
+  .value-number {
+    font-size: 1.625rem; /* 26px */
+  }
+
+  .priority-badge {
+    font-size: 0.625rem; /* 10px */
+    padding: 0.1875rem 0.5rem;
+  }
+}
+
+/* Medium phones (375px - 428px) */
+@media (min-width: 375px) and (max-width: 428px) {
+  .rules-container {
+    padding: 1.125rem;
+  }
+
+  .bonus-card {
+    padding: 1.125rem;
+  }
+}
+
+/* Large phones (> 428px) */
+@media (min-width: 429px) {
+  .rules-container {
+    padding: 1.25rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Tablets and up */
+@media (min-width: 768px) {
+  .rules-container {
+    max-width: 42rem;
+    margin: 0 auto;
+  }
+
+  .bonus-card {
+    padding: 1.5rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ============================================= */
+/* TOUCH IMPROVEMENTS */
+/* ============================================= */
+
+/* Increase touch target size */
+.collapsible-header {
+  min-height: 3rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling */
+.rules-container {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent text selection during interaction */
+.bonus-card,
+.rule-card,
+.penalty-card {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection for descriptions */
+.bonus-description,
+.rule-card p,
+.penalty-description {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ============================================= */
+/* ANIMATIONS */
+/* ============================================= */
+
+.bonus-card,
+.rule-card {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.bonus-card:active,
+.rule-card:active {
+  transform: scale(0.99);
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.625rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bonus-card,
+.rule-card {
+  animation: fadeIn 0.3s ease;
+}
+
+/* ============================================= */
+/* UTILITY CLASSES */
+/* ============================================= */
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Spacing utilities for mobile */
+.mb-mobile-sm {
+  margin-bottom: 0.5rem;
+}
+
+.mb-mobile-md {
+  margin-bottom: 0.75rem;
+}
+
+.mb-mobile-lg {
+  margin-bottom: 1rem;
+}
+
+.p-mobile-sm {
+  padding: 0.75rem;
+}
+
+.p-mobile-md {
+  padding: 1rem;
+}
+
+.p-mobile-lg {
+  padding: 1.25rem;
+}

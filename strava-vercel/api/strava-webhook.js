@@ -10,7 +10,7 @@ const supabase = createClient(
       autoRefreshToken: false,
       persistSession: false,
     },
-  }
+  },
 );
 async function refreshStravaToken(refreshToken) {
   const response = await fetch("https://www.strava.com/oauth/token", {
@@ -32,7 +32,7 @@ async function getValidAccessToken(userId) {
   const { data: user } = await supabase
     .from("users")
     .select(
-      "strava_access_token, strava_refresh_token, strava_token_expires_at"
+      "strava_access_token, strava_refresh_token, strava_token_expires_at",
     )
     .eq("id", userId)
     .single();
@@ -51,7 +51,7 @@ async function getValidAccessToken(userId) {
         strava_access_token: newTokens.access_token,
         strava_refresh_token: newTokens.refresh_token,
         strava_token_expires_at: new Date(
-          newTokens.expires_at * 1000
+          newTokens.expires_at * 1000,
         ).toISOString(),
       })
       .eq("id", userId);
@@ -67,7 +67,7 @@ async function fetchStravaActivity(activityId, accessToken) {
     `https://www.strava.com/api/v3/activities/${activityId}`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    },
   );
 
   if (!response.ok) throw new Error("Failed to fetch activity");
@@ -133,11 +133,11 @@ async function updateParticipantStats(eventId, userId) {
 
     const totalKm = activities.reduce(
       (sum, a) => sum + (a.distance_km || 0),
-      0
+      0,
     );
     const totalPoints = activities.reduce(
       (sum, a) => sum + (a.points_earned || 0),
-      0
+      0,
     );
 
     const { error } = await supabase
@@ -167,7 +167,7 @@ async function updateParticipantStats(eventId, userId) {
     }
 
     console.log(
-      `📊 Updated stats: ${totalKm.toFixed(2)}km, ${totalPoints.toFixed(2)} pts`
+      `📊 Updated stats: ${totalKm.toFixed(2)}km, ${totalPoints.toFixed(2)} pts`,
     );
   } catch (error) {
     console.error("Error updating stats:", error);
@@ -185,7 +185,7 @@ async function updateTeamStats(teamId) {
 
     const teamTotalPoints = members.reduce(
       (sum, m) => sum + (m.total_points || 0),
-      0
+      0,
     );
 
     await supabase
@@ -201,6 +201,9 @@ async function updateTeamStats(teamId) {
 
 async function syncToEventActivities(userId, activity) {
   try {
+    // const activityDateTime = new Date(activity.start_date_local);
+    // const activityDate = activityDateTime.toISOString().split("T")[0];
+
     const activityDateTime = new Date(activity.start_date_local);
     const activityDate = activityDateTime.toISOString().split("T")[0];
 
@@ -370,7 +373,7 @@ export default async function handler(req, res) {
           }
 
           console.log(
-            `✅ Processing: ${activity.name} - Best Efforts: ${activity.best_efforts?.length || 0}`
+            `✅ Processing: ${activity.name} - Best Efforts: ${activity.best_efforts?.length || 0}`,
           );
 
           await supabase.from("strava_activities").upsert(
@@ -398,7 +401,7 @@ export default async function handler(req, res) {
                 updated_at: new Date().toISOString(),
               },
             ],
-            { onConflict: "strava_activity_id" }
+            { onConflict: "strava_activity_id" },
           );
 
           await syncToEventActivities(user.id, activity);

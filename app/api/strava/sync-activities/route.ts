@@ -23,7 +23,7 @@ async function getValidAccessToken(userId: string) {
   const { data: user } = await supabase
     .from("users")
     .select(
-      "strava_access_token, strava_refresh_token, strava_token_expires_at"
+      "strava_access_token, strava_refresh_token, strava_token_expires_at",
     )
     .eq("id", userId)
     .single();
@@ -42,7 +42,7 @@ async function getValidAccessToken(userId: string) {
         strava_access_token: newTokens.access_token,
         strava_refresh_token: newTokens.refresh_token,
         strava_token_expires_at: new Date(
-          newTokens.expires_at * 1000
+          newTokens.expires_at * 1000,
         ).toISOString(),
       })
       .eq("id", userId);
@@ -56,7 +56,7 @@ async function getValidAccessToken(userId: string) {
 async function saveBestEfforts(
   userId: string,
   activityId: number,
-  bestEfforts: any[]
+  bestEfforts: any[],
 ) {
   if (!bestEfforts || bestEfforts.length === 0) return;
 
@@ -84,8 +84,11 @@ async function saveBestEfforts(
 // Helper: Sync activity to events
 async function syncToEventActivities(userId: string, activity: any) {
   try {
+    // const activityDateTime = new Date(activity.start_date_local);
+    // const activityDate = activityDateTime.toISOString().split("T")[0];
+
+    const activityDate = activity.start_date_local.split("T")[0];
     const activityDateTime = new Date(activity.start_date_local);
-    const activityDate = activityDateTime.toISOString().split("T")[0];
 
     const { data: participations } = await supabase
       .from("event_participants")
@@ -192,7 +195,7 @@ export async function POST(request: NextRequest) {
       `https://www.strava.com/api/v3/athlete/activities?per_page=${perPage}&page=${page}`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -201,11 +204,11 @@ export async function POST(request: NextRequest) {
 
     const activities = await response.json();
     const runningActivities = activities.filter(
-      (a: any) => a.sport_type === "Run" || a.type === "Run"
+      (a: any) => a.sport_type === "Run" || a.type === "Run",
     );
 
     console.log(
-      `📊 Found ${runningActivities.length}/${activities.length} running activities`
+      `📊 Found ${runningActivities.length}/${activities.length} running activities`,
     );
 
     const savedActivities = [];
@@ -216,7 +219,7 @@ export async function POST(request: NextRequest) {
         `https://www.strava.com/api/v3/activities/${activity.id}`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
-        }
+        },
       );
 
       if (!detailResponse.ok) {
@@ -256,7 +259,7 @@ export async function POST(request: NextRequest) {
           ],
           {
             onConflict: "strava_activity_id",
-          }
+          },
         )
         .select()
         .single();
@@ -270,7 +273,7 @@ export async function POST(request: NextRequest) {
           await saveBestEfforts(
             userId,
             detailedActivity.id,
-            detailedActivity.best_efforts
+            detailedActivity.best_efforts,
           );
         }
 
@@ -295,7 +298,7 @@ export async function POST(request: NextRequest) {
     console.error("❌ Sync error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to sync activities" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
