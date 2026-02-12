@@ -1,9 +1,9 @@
 // api/strava-webhook.js - FIXED DATE COMPARISON
 import { createClient } from "@supabase/supabase-js";
-const {
+import {
   calculateActivityPoints,
   validateBlockingRules,
-} = require("./points-calculator");
+} from "./points-calculator.js";
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
