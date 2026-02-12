@@ -225,7 +225,7 @@ function validateBlockingRules(activity, eventRules) {
   };
 }
 
-module.exports = {
+exports = {
   calculateActivityPoints,
   validateBlockingRules,
   validateTetBonus,
