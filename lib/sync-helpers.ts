@@ -1,37 +1,99 @@
-// lib/sync-helpers.ts
-// Safe date extraction helpers
+// lib/sync-helpers.ts - FIXED: Normalize activity before calculating points
+import { createClient } from "@supabase/supabase-js";
+import { calculateActivityPoints, type BonusResult } from "./points-calculator";
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
+
+// ==========================================
+// NORMALIZE STRAVA ACTIVITY
+// ==========================================
 /**
- * Safely extract date part (YYYY-MM-DD) from any date string format
- * Handles:
- * - "2026-02-11" → "2026-02-11"
- * - "2026-02-11T00:00:00" → "2026-02-11"
- * - "2026-02-11T00:00:00+07:00" → "2026-02-11"
- * - null/undefined → ""
+ * Convert Strava API activity format to our internal format
+ * for points calculation
  */
+function normalizeStravaActivity(stravaActivity: any): {
+  distance_km: number;
+  pace_min_per_km: number | null;
+  start_date: string;
+  [key: string]: any;
+} {
+  const distanceKm = stravaActivity.distance / 1000; // meters → km
+  const paceMinPerKm =
+    stravaActivity.moving_time > 0 && distanceKm > 0
+      ? stravaActivity.moving_time / 60 / distanceKm
+      : null;
+
+  return {
+    ...stravaActivity,
+    distance_km: distanceKm,
+    pace_min_per_km: paceMinPerKm,
+    start_date: stravaActivity.start_date_local,
+  };
+}
+
+// ==========================================
+// VALIDATE BLOCKING RULES
+// ==========================================
+function validateBlockingRules(
+  activity: any,
+  eventRules: Array<{ rule_type: string; config: any }>,
+): {
+  isValid: boolean;
+  failures: Array<{ rule: string; message: string }>;
+} {
+  // ✅ Use normalized distance_km
+  const distanceKm = activity.distance_km;
+  const failures = [];
+
+  // Check min_distance
+  const minDistanceRule = eventRules.find(
+    (r) => r.rule_type === "min_distance",
+  );
+  if (minDistanceRule) {
+    const minKm = minDistanceRule.config.min_km || 2.0;
+    if (distanceKm < minKm) {
+      failures.push({
+        rule: "min_distance",
+        message: `❌ Chưa đủ quãng đường tối thiểu (${distanceKm.toFixed(2)}km < ${minKm}km)`,
+      });
+    }
+  }
+
+  // Check pace_range
+  const paceRule = eventRules.find((r) => r.rule_type === "pace_range");
+  if (paceRule && activity.pace_min_per_km) {
+    const paceMinPerKm = activity.pace_min_per_km;
+    const minPace = paceRule.config.min_pace || 0;
+    const maxPace = paceRule.config.max_pace || Infinity;
+
+    if (paceMinPerKm < minPace || paceMinPerKm > maxPace) {
+      failures.push({
+        rule: "pace_range",
+        message: `❌ Pace không hợp lệ (${paceMinPerKm.toFixed(2)} min/km ngoài khoảng ${minPace}-${maxPace})`,
+      });
+    }
+  }
+
+  return {
+    isValid: failures.length === 0,
+    failures,
+  };
+}
+
+// ==========================================
+// SAFE DATE EXTRACTION
+// ==========================================
 export function extractDateOnly(dateString: string | null | undefined): string {
   if (!dateString) return "";
-
   const dateStr = String(dateString);
-
-  // If contains "T", split by it
-  if (dateStr.includes("T")) {
-    return dateStr.split("T")[0];
-  }
-
-  // If no "T", assume it's already YYYY-MM-DD or extract first 10 chars
-  // This handles edge cases like "2026-02-11 00:00:00" (space instead of T)
-  if (dateStr.includes(" ")) {
-    return dateStr.split(" ")[0];
-  }
-
-  // Take first 10 characters (YYYY-MM-DD)
+  if (dateStr.includes("T")) return dateStr.split("T")[0];
+  if (dateStr.includes(" ")) return dateStr.split(" ")[0];
   return dateStr.substring(0, 10);
 }
 
-/**
- * Check if date is in range (inclusive)
- */
 export function isDateInRange(
   date: string,
   startDate: string,
@@ -40,39 +102,53 @@ export function isDateInRange(
   const d = extractDateOnly(date);
   const start = extractDateOnly(startDate);
   const end = extractDateOnly(endDate);
-
   if (!d || !start || !end) return false;
-
   return d >= start && d <= end;
 }
 
 // ==========================================
-// IMPROVED SYNC FUNCTION
+// 🔥 SYNC WITH RULES VALIDATION - FIXED
 // ==========================================
-
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
-
-export async function syncToEventActivitiesV2(userId: string, activity: any) {
+export async function syncToEventActivitiesV2(
+  userId: string,
+  stravaActivity: any,
+) {
   try {
-    // Safe date extraction
-    const activityDate = extractDateOnly(activity.start_date_local);
+    const activityDate = extractDateOnly(stravaActivity.start_date_local);
 
     if (!activityDate) {
-      console.error("❌ Invalid activity date:", activity.start_date_local);
+      console.error(
+        "❌ Invalid activity date:",
+        stravaActivity.start_date_local,
+      );
       return { success: false, error: "Invalid activity date" };
     }
 
-    console.log(`🔍 Syncing activity ${activity.id} (${activityDate})`);
+    console.log(`🔍 Syncing activity ${stravaActivity.id} (${activityDate})`);
 
-    // Get user's event participations
+    // ✅ CRITICAL: Normalize activity ONCE at the start
+    const normalizedActivity = normalizeStravaActivity(stravaActivity);
+    console.log(
+      `   📊 Normalized: ${normalizedActivity.distance_km.toFixed(2)}km, pace: ${normalizedActivity.pace_min_per_km?.toFixed(2) || "N/A"} min/km`,
+    );
+
+    // Get participations WITH RULES
     const { data: participations, error: partError } = await supabase
       .from("event_participants")
-      .select("event_id, events!inner(*)")
+      .select(
+        `
+        event_id, 
+        events!inner(
+          id, 
+          name, 
+          start_date, 
+          end_date,
+          event_rules(
+            rules(*)
+          )
+        )
+      `,
+      )
       .eq("user_id", userId);
 
     if (partError) {
@@ -92,7 +168,6 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
       const event = participation.events;
       const eventId = participation.event_id;
 
-      // Safe date extraction for events
       const eventStartDate = extractDateOnly(event.start_date);
       const eventEndDate = extractDateOnly(event.end_date);
 
@@ -100,7 +175,7 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
         `   Event "${event.name}": ${eventStartDate} to ${eventEndDate}`,
       );
 
-      // Check if activity is in event date range
+      // Check date range
       if (!isDateInRange(activityDate, eventStartDate, eventEndDate)) {
         console.log(`   ⏭️ Skip - outside range`);
         results.push({
@@ -112,20 +187,71 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
         continue;
       }
 
-      console.log(`   ✅ Match - syncing...`);
+      console.log(`   ✅ Match - validating rules...`);
+
+      // Get event rules
+      const eventRules = (event.event_rules || []).map((er: any) => ({
+        rule_type: er.rules.rule_type,
+        config: er.rules.config,
+      }));
+
+      console.log(`   📋 Found ${eventRules.length} rules for event`);
+
+      // ✅ Validate blocking rules (với normalized activity)
+      const blockingValidation = validateBlockingRules(
+        normalizedActivity,
+        eventRules,
+      );
+
+      if (!blockingValidation.isValid) {
+        console.log(`   ❌ Failed blocking rules:`);
+        blockingValidation.failures.forEach((f) => {
+          console.log(`      - ${f.message}`);
+        });
+
+        results.push({
+          eventId,
+          eventName: event.name,
+          action: "blocked",
+          reason: "Failed blocking rules",
+          failures: blockingValidation.failures.map((f) => f.message),
+        });
+        continue; // Skip this event
+      }
+
+      // ✅ Calculate points with bonuses (với normalized activity)
+      const pointsCalc = calculateActivityPoints(
+        normalizedActivity,
+        eventRules,
+      );
+
+      console.log(`   📊 Points calculation:`);
+      console.log(`      Base points: ${pointsCalc.basePoints.toFixed(2)}`);
+      if (pointsCalc.appliedBonus) {
+        console.log(
+          `      ✨ Applied bonus: ${pointsCalc.appliedBonus.bonusName} (x${pointsCalc.appliedBonus.multiplier})`,
+        );
+        console.log(`      💬 ${pointsCalc.appliedBonus.message}`);
+      }
+      if (pointsCalc.rejectedBonuses.length > 0) {
+        console.log(`      ⏭️ Rejected bonuses (lower priority):`);
+        pointsCalc.rejectedBonuses.forEach((b) => {
+          console.log(`         - ${b.bonusName} (x${b.multiplier})`);
+        });
+      }
+      console.log(
+        `      ✅ Final points: ${pointsCalc.finalPoints.toFixed(2)}`,
+      );
 
       // Prepare activity data
-      const distanceKm = activity.distance / 1000;
-      const paceMinPerKm =
-        activity.moving_time > 0 && distanceKm > 0
-          ? activity.moving_time / 60 / distanceKm
-          : null;
+      const distanceKm = normalizedActivity.distance_km;
+      const paceMinPerKm = normalizedActivity.pace_min_per_km;
 
-      const routeData = activity.map?.summary_polyline
-        ? { polyline: activity.map.summary_polyline }
+      const routeData = stravaActivity.map?.summary_polyline
+        ? { polyline: stravaActivity.map.summary_polyline }
         : null;
 
-      // Check if already exists
+      // Check existing
       const { data: existing, error: existError } = await supabase
         .from("activities")
         .select("id")
@@ -148,16 +274,18 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
       let action = "";
 
       if (existing) {
-        // Update
+        // UPDATE with bonuses
         const { error: updateError } = await supabase
           .from("activities")
           .update({
             distance_km: distanceKm,
-            duration_seconds: activity.moving_time,
+            duration_seconds: stravaActivity.moving_time,
             pace_min_per_km: paceMinPerKm,
             route_data: routeData,
-            description: activity.name,
-            points_earned: distanceKm,
+            description: stravaActivity.name,
+            points_earned: pointsCalc.finalPoints.toFixed(2), // ✅ With bonuses
+            bonus_multiplier: pointsCalc.appliedBonus?.multiplier || 1,
+            bonus_message: pointsCalc.appliedBonus?.message || null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", existing.id);
@@ -174,9 +302,11 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
         }
 
         action = "updated";
-        console.log(`   ✅ Updated`);
+        console.log(
+          `   ✅ Updated with points: ${pointsCalc.finalPoints.toFixed(2)}`,
+        );
       } else {
-        // Insert
+        // INSERT with bonuses
         const { error: insertError } = await supabase
           .from("activities")
           .insert([
@@ -185,11 +315,13 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
               event_id: eventId,
               activity_date: activityDate,
               distance_km: distanceKm,
-              duration_seconds: activity.moving_time,
+              duration_seconds: stravaActivity.moving_time,
               pace_min_per_km: paceMinPerKm,
               route_data: routeData,
-              description: activity.name,
-              points_earned: distanceKm,
+              description: stravaActivity.name,
+              points_earned: pointsCalc.finalPoints.toFixed(2), // ✅ With bonuses
+              bonus_multiplier: pointsCalc.appliedBonus?.multiplier || 1,
+              bonus_message: pointsCalc.appliedBonus?.message || null,
             },
           ]);
 
@@ -205,7 +337,9 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
         }
 
         action = "created";
-        console.log(`   ✅ Created`);
+        console.log(
+          `   ✅ Created with points: ${pointsCalc.finalPoints.toFixed(2)}`,
+        );
       }
 
       // Update participant stats
@@ -217,10 +351,12 @@ export async function syncToEventActivitiesV2(userId: string, activity: any) {
         eventName: event.name,
         action,
         distanceKm: distanceKm.toFixed(2),
+        bonus: pointsCalc.appliedBonus?.bonusName || null,
+        points: pointsCalc.finalPoints.toFixed(2),
       });
     }
 
-    console.log(`✅ Synced ${syncedCount} event(s)`);
+    console.log(`✅ Synced ${syncedCount} event(s) with rules validation`);
 
     return {
       success: true,
@@ -244,9 +380,7 @@ async function updateParticipantStats(eventId: string, userId: string) {
       .eq("event_id", eventId)
       .eq("user_id", userId);
 
-    if (!activities || activities.length === 0) {
-      return;
-    }
+    if (!activities || activities.length === 0) return;
 
     const totalKm = activities.reduce(
       (sum, a) => sum + (a.distance_km || 0),
@@ -262,9 +396,14 @@ async function updateParticipantStats(eventId: string, userId: string) {
       .update({
         total_km: totalKm,
         total_points: totalPoints,
+        activity_count: activities.length,
       })
       .eq("event_id", eventId)
       .eq("user_id", userId);
+
+    console.log(
+      `   📊 Updated stats: ${totalKm.toFixed(2)}km, ${totalPoints.toFixed(2)} pts`,
+    );
   } catch (error) {
     console.error("Error updating participant stats:", error);
   }
