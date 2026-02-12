@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeStravaCode } from "@/lib/strava";
 import { supabase } from "@/lib/supabase";
 import { cookies } from "next/headers";
+import { syncToEventActivitiesV2 } from "@/lib/sync-helpers";
 
 /**
  * Save/update best efforts - ONLY KEEP THE FASTEST TIME
@@ -10,7 +11,7 @@ import { cookies } from "next/headers";
 async function saveBestEfforts(
   userId: string,
   activityId: number,
-  bestEfforts: any[]
+  bestEfforts: any[],
 ) {
   if (!bestEfforts || bestEfforts.length === 0) return;
 
@@ -66,7 +67,7 @@ async function autoSyncActivities(userId: string, accessToken: string) {
       `https://www.strava.com/api/v3/athlete/activities?per_page=30&page=1`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -76,11 +77,11 @@ async function autoSyncActivities(userId: string, accessToken: string) {
 
     const activities = await response.json();
     const runningActivities = activities.filter(
-      (a: any) => a.sport_type === "Run" || a.type === "Run"
+      (a: any) => a.sport_type === "Run" || a.type === "Run",
     );
 
     console.log(
-      `📊 Found ${runningActivities.length} running activities out of ${activities.length} total`
+      `📊 Found ${runningActivities.length} running activities out of ${activities.length} total`,
     );
 
     const { data: user } = await supabase
@@ -99,7 +100,7 @@ async function autoSyncActivities(userId: string, accessToken: string) {
         `https://www.strava.com/api/v3/activities/${activity.id}`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
-        }
+        },
       );
 
       if (!detailResponse.ok) continue;
@@ -132,7 +133,7 @@ async function autoSyncActivities(userId: string, accessToken: string) {
             updated_at: new Date().toISOString(),
           },
         ],
-        { onConflict: "strava_activity_id" }
+        { onConflict: "strava_activity_id" },
       );
 
       if (!error) {
@@ -144,12 +145,13 @@ async function autoSyncActivities(userId: string, accessToken: string) {
           await saveBestEfforts(
             userId,
             detailedActivity.id,
-            detailedActivity.best_efforts
+            detailedActivity.best_efforts,
           );
         }
 
         // Sync to events
-        await syncToEventActivities(userId, detailedActivity);
+        // await syncToEventActivities(userId, detailedActivity);
+        await syncToEventActivitiesV2(userId, detailedActivity);
         syncedCount++;
       }
     }
@@ -255,11 +257,11 @@ async function updateParticipantStats(eventId: string, userId: string) {
 
     const totalKm = activities.reduce(
       (sum, a) => sum + (a.distance_km || 0),
-      0
+      0,
     );
     const totalPoints = activities.reduce(
       (sum, a) => sum + (a.points_earned || 0),
-      0
+      0,
     );
 
     await supabase
@@ -272,7 +274,7 @@ async function updateParticipantStats(eventId: string, userId: string) {
       .eq("user_id", userId);
 
     console.log(
-      `📊 Updated participant stats: ${totalKm.toFixed(2)}km, ${totalPoints.toFixed(2)} pts`
+      `📊 Updated participant stats: ${totalKm.toFixed(2)}km, ${totalPoints.toFixed(2)} pts`,
     );
   } catch (error) {
     console.error("Error updating participant stats:", error);
@@ -288,25 +290,25 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/?error=${encodeURIComponent(error)}`
+        `${process.env.NEXT_PUBLIC_APP_URL}/?error=${encodeURIComponent(error)}`,
       );
     }
 
     if (!code) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/?error=no_code`
+        `${process.env.NEXT_PUBLIC_APP_URL}/?error=no_code`,
       );
     }
 
     const requiredScopes = ["read", "activity:read_all"];
     const approvedScopes = scope?.split(",") || [];
     const hasAllScopes = requiredScopes.every((s) =>
-      approvedScopes.includes(s)
+      approvedScopes.includes(s),
     );
 
     if (!hasAllScopes) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/?error=insufficient_scope`
+        `${process.env.NEXT_PUBLIC_APP_URL}/?error=insufficient_scope`,
       );
     }
 
@@ -329,7 +331,7 @@ export async function GET(request: NextRequest) {
           strava_access_token: tokens.access_token,
           strava_refresh_token: tokens.refresh_token,
           strava_token_expires_at: new Date(
-            tokens.expires_at * 1000
+            tokens.expires_at * 1000,
           ).toISOString(),
           strava_athlete_data: athlete,
           updated_at: new Date().toISOString(),
@@ -356,7 +358,7 @@ export async function GET(request: NextRequest) {
             strava_access_token: tokens.access_token,
             strava_refresh_token: tokens.refresh_token,
             strava_token_expires_at: new Date(
-              tokens.expires_at * 1000
+              tokens.expires_at * 1000,
             ).toISOString(),
             strava_athlete_data: athlete,
           },
@@ -367,7 +369,7 @@ export async function GET(request: NextRequest) {
       if (createError || !newUser) {
         console.error("Error creating user:", createError);
         return NextResponse.redirect(
-          `${process.env.NEXT_PUBLIC_APP_URL}/?error=user_creation_failed`
+          `${process.env.NEXT_PUBLIC_APP_URL}/?error=user_creation_failed`,
         );
       }
 
@@ -389,12 +391,12 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/?auth=success${isNewUser ? "&new_user=true" : ""}`
+      `${process.env.NEXT_PUBLIC_APP_URL}/?auth=success${isNewUser ? "&new_user=true" : ""}`,
     );
   } catch (error: any) {
     console.error("Strava callback error:", error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/?error=callback_failed`
+      `${process.env.NEXT_PUBLIC_APP_URL}/?error=callback_failed`,
     );
   }
 }

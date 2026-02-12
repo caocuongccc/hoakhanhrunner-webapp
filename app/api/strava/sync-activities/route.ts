@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
+import { syncToEventActivitiesV2 } from "@/lib/sync-helpers";
 
 async function refreshStravaToken(refreshToken: string) {
   const response = await fetch("https://www.strava.com/oauth/token", {
@@ -293,7 +294,8 @@ export async function POST(request: NextRequest) {
         }
 
         // Sync to event activities (with polyline)
-        await syncToEventActivities(userId, detailedActivity);
+        // await syncToEventActivities(userId, detailedActivity);
+        await syncToEventActivitiesV2(userId, detailedActivity);
 
         savedActivities.push(data);
       }

@@ -1,6 +1,6 @@
 // api/strava-webhook.js - FIXED DATE COMPARISON
 import { createClient } from "@supabase/supabase-js";
-
+import { syncToEventActivitiesV2 } from "../../lib/sync-helpers.js";
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -411,7 +411,8 @@ export default async function handler(req, res) {
             { onConflict: "strava_activity_id" },
           );
 
-          await syncToEventActivities(user.id, activity);
+          // await syncToEventActivities(user.id, activity);
+          await syncToEventActivitiesV2(user.id, activity);
 
           await supabase
             .from("strava_webhook_events")

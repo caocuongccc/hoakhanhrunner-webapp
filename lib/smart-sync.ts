@@ -1,5 +1,6 @@
 // lib/smart-sync.ts - Smart sync logic with history tracking
 import { supabase } from "./supabase";
+import { syncToEventActivitiesV2 } from "./sync-helpers";
 
 type SyncResult = {
   synced: number;
@@ -44,7 +45,7 @@ async function saveSyncHistory(
   userId: string,
   syncDate: Date,
   activitiesCount: number,
-  success: boolean
+  success: boolean,
 ) {
   try {
     await supabase.from("sync_history").insert({
@@ -64,7 +65,7 @@ async function saveSyncHistory(
  */
 export async function smartSync(
   userId: string,
-  accessToken: string
+  accessToken: string,
 ): Promise<SyncResult> {
   try {
     console.log("🧠 Smart sync starting for user:", userId);
@@ -96,7 +97,7 @@ export async function smartSync(
         `https://www.strava.com/api/v3/athlete/activities?after=${afterTimestamp}&per_page=30&page=${page}`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -126,7 +127,7 @@ export async function smartSync(
           `https://www.strava.com/api/v3/activities/${activity.id}`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
-          }
+          },
         );
 
         if (!detailResponse.ok) {
@@ -162,7 +163,7 @@ export async function smartSync(
               updated_at: new Date().toISOString(),
             },
           ],
-          { onConflict: "strava_activity_id" }
+          { onConflict: "strava_activity_id" },
         );
 
         if (!error) {
@@ -174,12 +175,13 @@ export async function smartSync(
             await saveBestEffortsOptimized(
               userId,
               detailedActivity.id,
-              detailedActivity.best_efforts
+              detailedActivity.best_efforts,
             );
           }
 
           // Sync to event activities
-          await syncToEventActivities(userId, detailedActivity);
+          // await syncToEventActivities(userId, detailedActivity);
+          await syncToEventActivitiesV2(userId, detailedActivity);
           totalSynced++;
         }
       }
@@ -191,7 +193,7 @@ export async function smartSync(
     await saveSyncHistory(userId, new Date(), totalSynced, true);
 
     console.log(
-      `✅ Smart sync completed: ${totalSynced} synced, ${totalSkipped} skipped`
+      `✅ Smart sync completed: ${totalSynced} synced, ${totalSkipped} skipped`,
     );
 
     return {
@@ -213,7 +215,7 @@ export async function smartSync(
 async function saveBestEffortsOptimized(
   userId: string,
   activityId: number,
-  bestEfforts: any[]
+  bestEfforts: any[],
 ) {
   for (const effort of bestEfforts) {
     const { data: existingPR } = await supabase
@@ -344,11 +346,11 @@ async function updateParticipantStats(eventId: string, userId: string) {
 
     const totalKm = activities.reduce(
       (sum, a) => sum + (a.distance_km || 0),
-      0
+      0,
     );
     const totalPoints = activities.reduce(
       (sum, a) => sum + (a.points_earned || 0),
-      0
+      0,
     );
 
     await supabase

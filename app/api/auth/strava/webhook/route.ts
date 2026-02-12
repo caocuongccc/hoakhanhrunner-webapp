@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         loggedEvent.id,
         aspect_type,
         object_id,
-        owner_id
+        owner_id,
       ).catch((err) => {
         console.error("Error processing activity event:", err);
       });
@@ -96,7 +96,7 @@ async function processActivityEvent(
   eventId: string,
   aspectType: string,
   activityId: number,
-  athleteId: number
+  athleteId: number,
 ) {
   try {
     // Find user by Strava athlete ID
@@ -160,14 +160,14 @@ async function processActivityEvent(
           ],
           {
             onConflict: "strava_activity_id",
-          }
+          },
         )
         .select()
         .single();
 
       if (activityError) {
         throw new Error(
-          `Failed to save Strava activity: ${activityError.message}`
+          `Failed to save Strava activity: ${activityError.message}`,
         );
       }
 
@@ -176,7 +176,7 @@ async function processActivityEvent(
 
       await updateEventStatus(eventId, true, "Activity processed successfully");
       console.log(
-        `Successfully processed activity ${activityId} for user ${user.username}`
+        `Successfully processed activity ${activityId} for user ${user.username}`,
       );
     } else if (aspectType === "delete") {
       // Mark activity as deleted
@@ -200,7 +200,7 @@ async function processActivityEvent(
 async function syncToEventActivities(
   stravaActivityId: string,
   userId: string,
-  activity: any
+  activity: any,
 ) {
   try {
     // Get all active events that the user is participating in
@@ -297,7 +297,7 @@ async function syncToEventActivities(
 async function updateEventStatus(
   eventId: string,
   processed: boolean,
-  message?: string
+  message?: string,
 ) {
   await supabase
     .from("strava_webhook_events")
