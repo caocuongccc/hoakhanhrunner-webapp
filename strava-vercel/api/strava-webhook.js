@@ -1,6 +1,6 @@
 // api/strava-webhook.js - FIXED DATE COMPARISON
 import { createClient } from "@supabase/supabase-js";
-import { syncToEventActivitiesV2 } from "../../lib/sync-helpers.js";
+// import { syncToEventActivitiesV2 } from "../../lib/sync-helpers.js";
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -112,6 +112,7 @@ async function saveBestEfforts(userId, activityId, bestEfforts) {
     }
   }
 }
+
 
 async function updateParticipantStats(eventId, userId) {
   try {
@@ -293,6 +294,184 @@ async function syncToEventActivities(userId, activity) {
   }
 }
 
+async function syncToEventActivitiesV2(userId, activity) {
+  try {
+    // Safe date extraction
+    const activityDate = extractDateOnly(activity.start_date_local);
+
+    if (!activityDate) {
+      console.error("❌ Invalid activity date:", activity.start_date_local);
+      return { success: false, error: "Invalid activity date" };
+    }
+
+    console.log(`🔍 Syncing activity ${activity.id} (${activityDate})`);
+
+    // Get user's event participations
+    const { data: participations, error: partError } = await supabase
+      .from("event_participants")
+      .select("event_id, events!inner(*)")
+      .eq("user_id", userId);
+
+    if (partError) {
+      console.error("❌ Error fetching participations:", partError);
+      return { success: false, error: partError.message };
+    }
+
+    if (!participations || participations.length === 0) {
+      console.log("⚠️ User not in any events");
+      return { success: false, reason: "no_events" };
+    }
+
+    let syncedCount = 0;
+    const results: any[] = [];
+
+    for (const participation of participations) {
+      const event = participation.events;
+      const eventId = participation.event_id;
+
+      // Safe date extraction for events
+      const eventStartDate = extractDateOnly(event.start_date);
+      const eventEndDate = extractDateOnly(event.end_date);
+
+      console.log(
+        `   Event "${event.name}": ${eventStartDate} to ${eventEndDate}`,
+      );
+
+      // Check if activity is in event date range
+      if (!isDateInRange(activityDate, eventStartDate, eventEndDate)) {
+        console.log(`   ⏭️ Skip - outside range`);
+        results.push({
+          eventId,
+          eventName: event.name,
+          action: "skipped",
+          reason: "outside_range",
+        });
+        continue;
+      }
+
+      console.log(`   ✅ Match - syncing...`);
+
+      // Prepare activity data
+      const distanceKm = activity.distance / 1000;
+      const paceMinPerKm =
+        activity.moving_time > 0 && distanceKm > 0
+          ? activity.moving_time / 60 / distanceKm
+          : null;
+
+      const routeData = activity.map?.summary_polyline
+        ? { polyline: activity.map.summary_polyline }
+        : null;
+
+      // Check if already exists
+      const { data: existing, error: existError } = await supabase
+        .from("activities")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("event_id", eventId)
+        .eq("activity_date", activityDate)
+        .single();
+
+      if (existError && existError.code !== "PGRST116") {
+        console.error(`   ❌ Error checking existing:`, existError);
+        results.push({
+          eventId,
+          eventName: event.name,
+          action: "failed",
+          error: existError.message,
+        });
+        continue;
+      }
+
+      let action = "";
+
+      if (existing) {
+        // Update
+        const { error: updateError } = await supabase
+          .from("activities")
+          .update({
+            distance_km: distanceKm,
+            duration_seconds: activity.moving_time,
+            pace_min_per_km: paceMinPerKm,
+            route_data: routeData,
+            description: activity.name,
+            points_earned: distanceKm,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+
+        if (updateError) {
+          console.error(`   ❌ Update failed:`, updateError);
+          results.push({
+            eventId,
+            eventName: event.name,
+            action: "failed",
+            error: updateError.message,
+          });
+          continue;
+        }
+
+        action = "updated";
+        console.log(`   ✅ Updated`);
+      } else {
+        // Insert
+        const { error: insertError } = await supabase
+          .from("activities")
+          .insert([
+            {
+              user_id: userId,
+              event_id: eventId,
+              activity_date: activityDate,
+              distance_km: distanceKm,
+              duration_seconds: activity.moving_time,
+              pace_min_per_km: paceMinPerKm,
+              route_data: routeData,
+              description: activity.name,
+              points_earned: distanceKm,
+            },
+          ]);
+
+        if (insertError) {
+          console.error(`   ❌ Insert failed:`, insertError);
+          results.push({
+            eventId,
+            eventName: event.name,
+            action: "failed",
+            error: insertError.message,
+          });
+          continue;
+        }
+
+        action = "created";
+        console.log(`   ✅ Created`);
+      }
+
+      // Update participant stats
+      await updateParticipantStats(eventId, userId);
+
+      syncedCount++;
+      results.push({
+        eventId,
+        eventName: event.name,
+        action,
+        distanceKm: distanceKm.toFixed(2),
+      });
+    }
+
+    console.log(`✅ Synced ${syncedCount} event(s)`);
+
+    return {
+      success: true,
+      synced: syncedCount,
+      results,
+    };
+  } catch (error: any) {
+    console.error("❌ Fatal error in syncToEventActivities:", error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
 export default async function handler(req, res) {
   console.log("🔥 Webhook:", req.method);
 
