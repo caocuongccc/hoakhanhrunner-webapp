@@ -1,4 +1,4 @@
-// app/api/strava/sync-activities/route.ts - FIXED VERSION
+// app/api/strava/sync-activities/route.ts - FIXED DATE COMPARISON
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
@@ -81,14 +81,11 @@ async function saveBestEfforts(
   }
 }
 
-// Helper: Sync activity to events
+// 🔥 FIXED: Proper date comparison without timezone issues
 async function syncToEventActivities(userId: string, activity: any) {
   try {
-    // const activityDateTime = new Date(activity.start_date_local);
-    // const activityDate = activityDateTime.toISOString().split("T")[0];
-
+    // Extract just the date part (YYYY-MM-DD) for comparison
     const activityDate = activity.start_date_local.split("T")[0];
-    const activityDateTime = new Date(activity.start_date_local);
 
     const { data: participations } = await supabase
       .from("event_participants")
@@ -102,10 +99,17 @@ async function syncToEventActivities(userId: string, activity: any) {
 
     for (const participation of participations) {
       const event = participation.events;
-      const eventStart = new Date(event.start_date);
-      const eventEnd = new Date(event.end_date);
 
-      if (activityDateTime >= eventStart && activityDateTime <= eventEnd) {
+      // Extract date parts for comparison (YYYY-MM-DD)
+      const eventStartDate = event.start_date.split("T")[0];
+      const eventEndDate = event.end_date.split("T")[0];
+
+      // Compare dates as strings (YYYY-MM-DD format) - no timezone issues
+      console.log(
+        `🔍 Checking event "${event.name}": ${eventStartDate} to ${eventEndDate}, activity date: ${activityDate}`,
+      );
+
+      if (activityDate >= eventStartDate && activityDate <= eventEndDate) {
         const eventId = participation.event_id;
         const distanceKm = activity.distance / 1000;
         const paceMinPerKm =
@@ -113,7 +117,6 @@ async function syncToEventActivities(userId: string, activity: any) {
             ? activity.moving_time / 60 / distanceKm
             : null;
 
-        // IMPORTANT: Save polyline from activity.map.summary_polyline
         const routeData = activity.map?.summary_polyline
           ? { polyline: activity.map.summary_polyline }
           : null;
@@ -133,12 +136,16 @@ async function syncToEventActivities(userId: string, activity: any) {
               distance_km: distanceKm,
               duration_seconds: activity.moving_time,
               pace_min_per_km: paceMinPerKm,
-              route_data: routeData, // Save polyline
+              route_data: routeData,
               description: activity.name,
               points_earned: distanceKm,
               updated_at: new Date().toISOString(),
             })
             .eq("id", existingActivity.id);
+
+          console.log(
+            `✅ Updated activity in event ${eventId} (${event.name})`,
+          );
         } else {
           await supabase.from("activities").insert([
             {
@@ -148,14 +155,22 @@ async function syncToEventActivities(userId: string, activity: any) {
               distance_km: distanceKm,
               duration_seconds: activity.moving_time,
               pace_min_per_km: paceMinPerKm,
-              route_data: routeData, // Save polyline
+              route_data: routeData,
               description: activity.name,
               points_earned: distanceKm,
             },
           ]);
+
+          console.log(
+            `✅ Created activity in event ${eventId} (${event.name})`,
+          );
         }
 
         console.log(`✅ Synced to event ${eventId} with polyline`);
+      } else {
+        console.log(
+          `⏭️ Activity ${activityDate} outside event range ${eventStartDate} to ${eventEndDate}`,
+        );
       }
     }
   } catch (error) {
@@ -247,7 +262,7 @@ export async function POST(request: NextRequest) {
               start_date: detailedActivity.start_date,
               start_date_local: detailedActivity.start_date_local,
               timezone: detailedActivity.timezone,
-              map_summary_polyline: detailedActivity.map?.summary_polyline, // Save polyline
+              map_summary_polyline: detailedActivity.map?.summary_polyline,
               average_speed: detailedActivity.average_speed,
               max_speed: detailedActivity.max_speed,
               average_heartrate: detailedActivity.average_heartrate,

@@ -25,6 +25,7 @@ import UserTracklogModal from "@/components/UserTracklogModal";
 import DualLeaderboard from "@/components/DualLeaderboard";
 import PenaltyTracker from "@/components/PenaltyTracker";
 import EventRulesDisplay from "@/components/EventRulesDisplay";
+import ExpandableDescription from "@/components/ExpandableDescription";
 
 export default function EventDetailPageComplete() {
   const params = useParams();
@@ -250,9 +251,13 @@ export default function EventDetailPageComplete() {
               </div>
             </div>
 
+            {/* 🔥 UPDATED: Expandable Description */}
             {event.description && (
               <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                <p className="text-gray-700">{event.description}</p>
+                <ExpandableDescription
+                  description={event.description}
+                  maxLines={2}
+                />
               </div>
             )}
           </div>

@@ -1,5 +1,4 @@
-// api/strava-webhook.js - FIXED VERSION WITH STATS UPDATE
-// const { createClient } = require("@supabase/supabase-js");
+// api/strava-webhook.js - FIXED DATE COMPARISON
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -12,6 +11,7 @@ const supabase = createClient(
     },
   },
 );
+
 async function refreshStravaToken(refreshToken) {
   const response = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
@@ -74,14 +74,10 @@ async function fetchStravaActivity(activityId, accessToken) {
   return response.json();
 }
 
-/**
- * Save best efforts - ONLY KEEP FASTEST TIME
- */
 async function saveBestEfforts(userId, activityId, bestEfforts) {
   if (!bestEfforts || bestEfforts.length === 0) return;
 
   for (const effort of bestEfforts) {
-    // Check existing PR
     const { data: existingPR } = await supabase
       .from("best_efforts")
       .select("*")
@@ -91,7 +87,6 @@ async function saveBestEfforts(userId, activityId, bestEfforts) {
       .limit(1)
       .single();
 
-    // If new time is faster, replace
     if (!existingPR || effort.elapsed_time < existingPR.elapsed_time) {
       if (existingPR) {
         await supabase
@@ -118,9 +113,6 @@ async function saveBestEfforts(userId, activityId, bestEfforts) {
   }
 }
 
-/**
- * Update participant stats - FIXED
- */
 async function updateParticipantStats(eventId, userId) {
   try {
     const { data: activities } = await supabase
@@ -154,7 +146,6 @@ async function updateParticipantStats(eventId, userId) {
       return;
     }
 
-    // Also update team stats if user is in a team
     const { data: participant } = await supabase
       .from("event_participants")
       .select("team_id")
@@ -199,13 +190,11 @@ async function updateTeamStats(teamId) {
   }
 }
 
+// 🔥 FIXED: Proper date comparison without timezone issues
 async function syncToEventActivities(userId, activity) {
   try {
-    // const activityDateTime = new Date(activity.start_date_local);
-    // const activityDate = activityDateTime.toISOString().split("T")[0];
-
-    const activityDateTime = new Date(activity.start_date_local);
-    const activityDate = activityDateTime.toISOString().split("T")[0];
+    // Extract just the date part (YYYY-MM-DD) for comparison
+    const activityDate = activity.start_date_local.split("T")[0];
 
     const { data: participations } = await supabase
       .from("event_participants")
@@ -224,10 +213,17 @@ async function syncToEventActivities(userId, activity) {
 
     for (const participation of participations) {
       const event = participation.events;
-      const eventStart = new Date(event.start_date);
-      const eventEnd = new Date(event.end_date);
 
-      if (activityDateTime >= eventStart && activityDateTime <= eventEnd) {
+      // Extract date parts for comparison (YYYY-MM-DD)
+      const eventStartDate = event.start_date.split("T")[0];
+      const eventEndDate = event.end_date.split("T")[0];
+
+      // Compare dates as strings (YYYY-MM-DD format) - no timezone issues
+      console.log(
+        `🔍 Checking event "${event.name}": ${eventStartDate} to ${eventEndDate}, activity date: ${activityDate}`,
+      );
+
+      if (activityDate >= eventStartDate && activityDate <= eventEndDate) {
         const eventId = participation.event_id;
         const distanceKm = activity.distance / 1000;
         const paceMinPerKm =
@@ -259,6 +255,10 @@ async function syncToEventActivities(userId, activity) {
               updated_at: new Date().toISOString(),
             })
             .eq("id", existingActivity.id);
+
+          console.log(
+            `✅ Updated activity in event ${eventId} (${event.name})`,
+          );
         } else {
           await supabase.from("activities").insert([
             {
@@ -273,11 +273,19 @@ async function syncToEventActivities(userId, activity) {
               points_earned: distanceKm,
             },
           ]);
+
+          console.log(
+            `✅ Created activity in event ${eventId} (${event.name})`,
+          );
         }
 
-        // IMPORTANT: Update participant stats
+        // Update participant stats
         await updateParticipantStats(eventId, userId);
         console.log(`✅ Synced to event ${eventId} (${event.name})`);
+      } else {
+        console.log(
+          `⏭️ Activity ${activityDate} outside event range ${eventStartDate} to ${eventEndDate}`,
+        );
       }
     }
   } catch (error) {
@@ -285,7 +293,6 @@ async function syncToEventActivities(userId, activity) {
   }
 }
 
-// module.exports = async function handler(req, res) {
 export default async function handler(req, res) {
   console.log("🔥 Webhook:", req.method);
 
