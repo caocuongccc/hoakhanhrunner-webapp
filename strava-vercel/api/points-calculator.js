@@ -225,9 +225,4 @@ function validateBlockingRules(activity, eventRules) {
   };
 }
 
-exports = {
-  calculateActivityPoints,
-  validateBlockingRules,
-  validateTetBonus,
-  validateLuckyDistance,
-};
+export { calculateActivityPoints, validateBlockingRules };
