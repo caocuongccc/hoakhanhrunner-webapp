@@ -495,7 +495,7 @@ async function syncToEventActivitiesV2(userId, activity) {
             route_data: routeData,
             description: activity.name,
             points_earned: pointsCalc.finalPoints, // ✅ NEW
-            base_points: pointsCalc.basePoints, // ✅ NEW
+            //base_points: pointsCalc.basePoints, // ✅ NEW
             points_multiplier: pointsCalc.appliedBonus?.multiplier || 1, // ✅ NEW
             bonus_type: pointsCalc.appliedBonus?.bonusType || null, // ✅ NEW
             bonus_message: pointsCalc.appliedBonus?.message || null, // ✅ NEW
@@ -531,7 +531,7 @@ async function syncToEventActivitiesV2(userId, activity) {
               route_data: routeData,
               description: activity.name,
               points_earned: pointsCalc.finalPoints, // ✅ NEW
-              base_points: pointsCalc.basePoints, // ✅ NEW
+              //base_points: pointsCalc.basePoints, // ✅ NEW
               points_multiplier: pointsCalc.appliedBonus?.multiplier || 1, // ✅ NEW
               bonus_type: pointsCalc.appliedBonus?.bonusType || null, // ✅ NEW
               bonus_message: pointsCalc.appliedBonus?.message || null, // ✅ NEW
