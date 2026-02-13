@@ -468,8 +468,9 @@ async function syncToEventActivitiesV2(userId, activity) {
         .select("id")
         .eq("user_id", userId)
         .eq("event_id", eventId)
-        .eq("activity_date", activityDate)
-        .single();
+        // .eq("activity_date", activityDate)
+        .eq("strava_activity_id", stravaActivity.id) // ✅ Unique ID
+        .maybeSingle(); // ✅ maybeSingle()
 
       if (existError && existError.code !== "PGRST116") {
         console.error(`   ❌ Error checking existing:`, existError);
@@ -490,14 +491,13 @@ async function syncToEventActivitiesV2(userId, activity) {
           .from("activities")
           .update({
             distance_km: distanceKm,
+            activity_date: activityDate, // ✅ Update date too
             duration_seconds: activity.moving_time,
             pace_min_per_km: paceMinPerKm,
             route_data: routeData,
             description: activity.name,
             points_earned: pointsCalc.finalPoints, // ✅ NEW
-            //base_points: pointsCalc.basePoints, // ✅ NEW
             bonus_multiplier: pointsCalc.appliedBonus?.multiplier || 1, // ✅ NEW
-            //bonus_type: pointsCalc.appliedBonus?.bonusType || null, // ✅ NEW
             bonus_message: pointsCalc.appliedBonus?.message || null, // ✅ NEW
             updated_at: new Date().toISOString(),
           })
@@ -525,15 +525,14 @@ async function syncToEventActivitiesV2(userId, activity) {
               user_id: userId,
               event_id: eventId,
               activity_date: activityDate,
+              strava_activity_id: stravaActivity.id,
               distance_km: distanceKm,
               duration_seconds: activity.moving_time,
               pace_min_per_km: paceMinPerKm,
               route_data: routeData,
               description: activity.name,
               points_earned: pointsCalc.finalPoints, // ✅ NEW
-              //base_points: pointsCalc.basePoints, // ✅ NEW
               bonus_multiplier: pointsCalc.appliedBonus?.multiplier || 1, // ✅ NEW
-              //bonus_type: pointsCalc.appliedBonus?.bonusType || null, // ✅ NEW
               bonus_message: pointsCalc.appliedBonus?.message || null, // ✅ NEW
             },
           ]);
@@ -561,6 +560,7 @@ async function syncToEventActivitiesV2(userId, activity) {
         eventId,
         eventName: event.name,
         action,
+        stravaActivityId: stravaActivity.id,
         distanceKm: distanceKm.toFixed(2),
       });
     }

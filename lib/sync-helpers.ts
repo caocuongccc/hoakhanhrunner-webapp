@@ -257,8 +257,9 @@ export async function syncToEventActivitiesV2(
         .select("id")
         .eq("user_id", userId)
         .eq("event_id", eventId)
-        .eq("activity_date", activityDate)
-        .single();
+        // .eq("activity_date", activityDate)
+        .eq("strava_activity_id", stravaActivity.id) // ✅ Unique ID
+        .maybeSingle();
 
       if (existError && existError.code !== "PGRST116") {
         console.error(`   ❌ Error checking existing:`, existError);
@@ -314,6 +315,7 @@ export async function syncToEventActivitiesV2(
               user_id: userId,
               event_id: eventId,
               activity_date: activityDate,
+              strava_activity_id: stravaActivity.id,
               distance_km: distanceKm,
               duration_seconds: stravaActivity.moving_time,
               pace_min_per_km: paceMinPerKm,
